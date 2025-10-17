@@ -47,6 +47,24 @@ function is_manager_or_higher(?array $user = null): bool
     return in_array($position, ['manager', 'senior manager'], true);
 }
 
+/**
+ * Determine whether the provided (or current) user is director-level.
+ */
+function is_director_level(?array $user = null): bool
+{
+    $user = $user ?? current_user();
+    if (!$user) {
+        return false;
+    }
+
+    $position = normalize_position($user['position'] ?? '');
+    if ($position === '') {
+        return false;
+    }
+
+    return str_contains($position, 'director');
+}
+
 /* =========================
    URL helpers (no .env)
    ========================= */
