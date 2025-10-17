@@ -313,7 +313,9 @@ async function loadTaskDetail(taskId, flash) {
 
   try {
     const res = await fetch('view.php?' + params.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-    modalBody.innerHTML = await res.text();
+    const html = await res.text();
+    modalBody.innerHTML = html;
+    activateInlineScripts(modalBody);
   } catch (err) {
     console.error(err);
     modalBody.innerHTML = '<div class="text-danger">โหลดรายละเอียดไม่สำเร็จ</div>';
@@ -330,6 +332,19 @@ async function openTaskModal(el, flash) {
 }
 
 window.loadTaskDetail = loadTaskDetail;
+
+function activateInlineScripts(container) {
+  if (!container) return;
+  const scripts = container.querySelectorAll('script');
+  scripts.forEach((oldScript) => {
+    const newScript = document.createElement('script');
+    for (const attr of oldScript.attributes) {
+      newScript.setAttribute(attr.name, attr.value);
+    }
+    newScript.appendChild(document.createTextNode(oldScript.textContent || ''));
+    oldScript.parentNode.replaceChild(newScript, oldScript);
+  });
+}
 
 function submissionStatusMetaClient(status) {
   switch ((status || '').toLowerCase()) {
