@@ -15,6 +15,38 @@ function current_user(): ?array { return $_SESSION['user'] ?? null; }
 function is_role(string $role): bool { $u = current_user(); return $u && ($u['role'] ?? 'employee') === $role; }
 function e(string $s): string { return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
+/**
+ * Normalize position (trim + lowercase) for comparisons.
+ */
+function normalize_position(?string $position): string
+{
+    $position = (string)$position;
+    return strtolower(trim($position));
+}
+
+/**
+ * Determine whether the provided (or current) user has at least manager-level access.
+ * Allowed positions: "manager", "senior manager" and any position containing the word "director".
+ */
+function is_manager_or_higher(?array $user = null): bool
+{
+    $user = $user ?? current_user();
+    if (!$user) {
+        return false;
+    }
+
+    $position = normalize_position($user['position'] ?? '');
+    if ($position === '') {
+        return false;
+    }
+
+    if (str_contains($position, 'director')) {
+        return true;
+    }
+
+    return in_array($position, ['manager', 'senior manager'], true);
+}
+
 /* =========================
    URL helpers (no .env)
    ========================= */
