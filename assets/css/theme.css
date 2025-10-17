@@ -1,0 +1,148 @@
+html, body{
+    font-family: var(--bs-font-sans-serif);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* ถ้าอยากให้หัวเรื่องหนาขึ้นเล็กน้อย */
+  h1, h2, h3, h4, h5, h6 { font-weight: 600; }
+  
+  /* ปุ่ม/การ์ด/เมนู ฯลฯ จะรับ var(--bs-font-sans-serif) อัตโนมัติ */
+/* assets/css/theme.css */
+/* โทนแดงเลือดหมู + ปรับปุ่ม/การ์ด/แถบด้านบน */
+:root{
+    --maroon-900:#5A0013;
+    --maroon-800:#6a0017;
+    --maroon-700:#7A0019; /* primary */
+    --maroon-600:#8c0020;
+    --maroon-500:#B3002D;
+    --maroon-300:#d45a74;
+    --maroon-100:#f7e6ea;
+  
+    --on-maroon:#ffffff;
+    --bs-font-sans-serif: "Prompt", system-ui, -apple-system, "Segoe UI",
+                        Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans",
+                        "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+                        "Noto Color Emoji";
+  }
+  
+  .bg-maroon{ background-color: var(--maroon-700)!important; }
+  .text-maroon{ color: var(--maroon-700)!important; }
+  
+  .navbar.bg-maroon .navbar-brand,
+  .navbar.bg-maroon .nav-link,
+  .navbar.bg-maroon .navbar-text { color: var(--on-maroon)!important; }
+  .navbar.bg-maroon .nav-link.active,
+  .navbar.bg-maroon .nav-link:hover { color: #fff!important; }
+  
+  /* ปุ่มหลัก */
+  .btn-primary{
+    --bs-btn-bg: var(--maroon-700);
+    --bs-btn-border-color: var(--maroon-700);
+    --bs-btn-hover-bg: var(--maroon-900);
+    --bs-btn-hover-border-color: var(--maroon-900);
+    --bs-btn-active-bg: var(--maroon-900);
+    --bs-btn-active-border-color: var(--maroon-900);
+  }
+  .btn-outline-primary{
+    --bs-btn-color: var(--maroon-700);
+    --bs-btn-border-color: var(--maroon-700);
+    --bs-btn-hover-bg: var(--maroon-700);
+    --bs-btn-hover-border-color: var(--maroon-700);
+    --bs-btn-hover-color: #fff;
+  }
+  
+  /* การ์ดสถิติ */
+  .card-stat .icon-wrap{
+    width: 48px; height: 48px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--maroon-100);
+    color: var(--maroon-700);
+    border-radius: 50%;
+    font-size: 1.25rem;
+  }
+  
+  /* Timeline เบา ๆ */
+  .timeline li{ position: relative; padding-left: 1.5rem; margin-bottom: .75rem; }
+  .timeline .dot{
+    width:10px;height:10px;border-radius:50%;
+    background: var(--maroon-500);
+    position:absolute; left:0; top:.35rem;
+    box-shadow:0 0 0 3px var(--maroon-100);
+  }
+  
+  /* Card header โทนอ่อน */
+  .card .card-header{
+    border-bottom: 1px solid #eee;
+  }
+  
+  /* Hero/cover */
+  .bg-maroon.text-white{
+    background: linear-gradient(135deg, var(--maroon-700), var(--maroon-500));
+  }
+  /* ปรับหัวปฏิทินให้เข้ากับธีม */
+.fc .fc-toolbar-title {
+    font-weight: 700;
+  }
+  .fc .fc-button-primary {
+    background-color: #6c1b2a;
+    border-color: #6c1b2a;
+  }
+  .fc .fc-button-primary:not(:disabled).fc-button-active,
+  .fc .fc-button-primary:not(:disabled):active,
+  .fc .fc-button-primary:hover {
+    background-color: #581522;
+    border-color: #581522;
+  }
+  
+  /* ปรับ event ให้มีเงานิด ๆ */
+  .fc-event {
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    border-radius: .5rem;
+  }
+
+/* ให้ event กินเต็มความกว้าง และไม่มีพื้นหลังซ้ำกับ FC */
+.fc .fc-daygrid-event,
+.fc .fc-timegrid-event { background: transparent; border: 0; padding: 0; }
+.fc .fc-daygrid-event-harness { width: 100%; }
+.fc .fc-daygrid-day-events { display: grid; gap: .25rem; }
+
+/* เม็ดยา: กล่องหลายบรรทัด โค้งมน เนื้อหาห่อบรรทัดได้ */
+.calendar-pill {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 999px;                 /* เม็ดยา */
+  background: rgba(255,255,255,.85);    /* โปร่งนิดๆ ให้ดูนุ่ม */
+  border: 1px solid rgba(0,0,0,.06);
+  box-shadow: 0 1px 3px rgba(0,0,0,.05);
+  padding: .4rem .6rem;
+}
+
+/* บรรทัดของ badge */
+.calendar-pill .chip-badges {
+  display: flex; align-items: center; gap: .375rem; flex-wrap: wrap;
+  margin-bottom: .2rem;
+}
+
+/* บรรทัดของ “ชื่องาน” ให้ขึ้นหลายบรรทัดได้ */
+.calendar-pill .chip-title {
+  font-size: .7rem;
+  line-height: 1.25;
+  white-space: normal;          /* <-- อนุญาตขึ้นบรรทัดใหม่ */
+  word-break: break-word;       /* ตัดคำยาว */
+  margin: 0;
+}
+
+/* ปรับ badge ให้เล็กลงและเป็น pill */
+.badge.badge-pill {
+  border-radius: 999px; 
+  font-weight: 600;
+  font-size: .7rem; 
+  padding: .25rem .5rem;
+}
+
+/* โทนสี badge ให้เข้ากับธีมแดงเลือดหมู */
+.badge-maroon { background-color:#6c1b2a; color:#fff; }   /* Final */
+.badge-amber  { background-color:#f0ad4e; color:#2b1b00;} /* Draft */
+.badge-green  { background-color:#198754; color:#fff; }   /* Launch */
+
