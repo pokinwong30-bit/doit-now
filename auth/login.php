@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($pass === '') $errors[] = 'กรุณากรอกรหัสผ่าน';
 
         if (!$errors) {
-            $stmt = $pdo->prepare('SELECT id,name,email,password_hash,role,status FROM users WHERE email = ? LIMIT 1');
+            $stmt = $pdo->prepare('SELECT id,name,email,password_hash,position,role,status FROM users WHERE email = ? LIMIT 1');
             $stmt->execute([$email]);
             $user = $stmt->fetch();
             $ok = $user && $user['status'] === 'active' && password_verify($pass, $user['password_hash']);
@@ -53,7 +53,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'id'    => (int)$user['id'],
                     'name'  => $user['name'],
                     'email' => $user['email'],
-                    'role'  => $user['role'],
+                    'role'      => $user['role'],
+                    'position'  => $user['position'] ?? null,
                 ];
                 go('/dashboard.php');
                 exit;

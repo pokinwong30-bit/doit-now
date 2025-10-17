@@ -83,7 +83,9 @@ try {
   // JOIN users as asg เพื่อค้นด้วยชื่อผู้รับมอบหมาย
   $sql = "SELECT t.id, t.task_code, t.title, t.status,
                  t.due_first_draft, t.due_final, t.launch_date,
-                 asg.name AS assignee_name
+                 asg.name AS assignee_name,
+                 (SELECT status FROM task_submissions WHERE task_id = t.id ORDER BY version DESC, id DESC LIMIT 1) AS latest_submission_status,
+                 (SELECT version FROM task_submissions WHERE task_id = t.id ORDER BY version DESC, id DESC LIMIT 1) AS latest_submission_version
           FROM tasks t
           LEFT JOIN users asg ON asg.id = t.assignee_id
           $sql_where";
@@ -110,6 +112,17 @@ try {
   foreach ($rows as $r) {
     $st = (string)$r['status'];
 
+    $submissionStatus = $r['latest_submission_status'] ?? null;
+    $submissionVersion = isset($r['latest_submission_version']) ? (int)$r['latest_submission_version'] : null;
+
+    $extended = [
+      'task_id' => (int)$r['id'],
+      'status' => $st,
+      'task_code' => $r['task_code'],
+      'submission_status' => $submissionStatus,
+      'submission_version' => $submissionVersion,
+    ];
+
     if (in_array('draft', $types, true) && !empty($r['due_first_draft'])) {
       $events[] = [
         'id' => 'task-'.$r['id'].'-draft',
@@ -118,7 +131,7 @@ try {
         'allDay'=> false,
         'backgroundColor' => ($st==='cancelled' ? $color['cancel'] : ($st==='done' ? $color['done'] : $color['draft'])),
         'borderColor' => 'transparent', 'textColor' => '#fff',
-        'extendedProps' => ['type'=>'draft','task_id'=>(int)$r['id'],'status'=>$st],
+        'extendedProps' => array_merge(['type' => 'draft'], $extended),
       ];
     }
     if (in_array('final', $types, true) && !empty($r['due_final'])) {
@@ -129,7 +142,7 @@ try {
         'allDay'=> false,
         'backgroundColor' => ($st==='cancelled' ? $color['cancel'] : ($st==='done' ? $color['done'] : $color['final'])),
         'borderColor' => 'transparent', 'textColor' => '#fff',
-        'extendedProps' => ['type'=>'final','task_id'=>(int)$r['id'],'status'=>$st],
+        'extendedProps' => array_merge(['type' => 'final'], $extended),
       ];
     }
     if (in_array('launch', $types, true) && !empty($r['launch_date'])) {
@@ -140,7 +153,7 @@ try {
         'allDay'=> false,
         'backgroundColor' => ($st==='cancelled' ? $color['cancel'] : ($st==='done' ? $color['done'] : $color['launch'])),
         'borderColor' => 'transparent', 'textColor' => '#fff',
-        'extendedProps' => ['type'=>'launch','task_id'=>(int)$r['id'],'status'=>$st],
+        'extendedProps' => array_merge(['type' => 'launch'], $extended),
       ];
     }
   }
