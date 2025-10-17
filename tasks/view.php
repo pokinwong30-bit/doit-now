@@ -80,6 +80,10 @@ $deliverables = json_decode((string)$task['deliverables_json'], true) ?: [];
 
 $user = current_user();
 $canReview = is_director_level($user);
+$canReview = is_manager_or_higher($user);
+$assigneeId = (int)($task['assignee_id'] ?? 0);
+$isAssignee = $user && (int)$user['id'] === $assigneeId;
+$canSubmit = $isAssignee || $canReview;
 
 $latestSubmission = $submissions[0] ?? null;
 $nextVersion = $latestSubmission ? ((int)$latestSubmission['version'] + 1) : 1;
@@ -347,6 +351,29 @@ if ($flashKey !== '') {
                 </button>
               </div>
             </form>
+            <?php if ($canSubmit): ?>
+              <form id="submitWorkForm" method="post" enctype="multipart/form-data" class="border rounded p-3 bg-light-subtle">
+                <?= csrf_field('submit_work_' . $task['id']) ?>
+                <input type="hidden" name="task_id" value="<?= (int)$task['id'] ?>">
+                <div class="mb-3">
+                  <label class="form-label">ไฟล์ผลงาน</label>
+                  <input type="file" name="file" class="form-control">
+                  <div class="form-text">รองรับไฟล์ภาพ วิดีโอ PDF และไฟล์งาน Adobe (สูงสุด 200MB)</div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">คำอธิบาย / โน้ตเพิ่มเติม</label>
+                  <textarea name="note" class="form-control" rows="3" placeholder="สรุปสิ่งที่เปลี่ยนแปลง หรือแนบลิงก์ประกอบ"></textarea>
+                  <div class="form-text">หากไม่มีไฟล์ สามารถส่งเฉพาะข้อความได้</div>
+                </div>
+                <div class="d-grid d-md-flex justify-content-md-end">
+                  <button type="submit" class="btn btn-primary" data-action="submit-work">
+                    <i class="bi bi-upload me-1"></i> ส่งงานฉบับใหม่
+                  </button>
+                </div>
+              </form>
+            <?php else: ?>
+              <div class="text-muted">เฉพาะผู้รับมอบหมายหรือตำแหน่งผู้จัดการขึ้นไปเท่านั้นที่สามารถส่งงานได้</div>
+            <?php endif; ?>
 
             <?php if ($canReview): ?>
               <?php if ($pendingSubmission): ?>
@@ -366,6 +393,20 @@ if ($flashKey !== '') {
                       <input class="form-check-input" type="radio" name="status" id="statusRevision" value="revision_required">
                       <label class="form-check-label" for="statusRevision">ขอแก้ไข</label>
                     </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="radio" name="status" id="statusRevision" value="revision_required">
+                      <label class="form-check-label" for="statusRevision">ขอแก้ไข</label>
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">ความคิดเห็น</label>
+                    <textarea name="comment" class="form-control" rows="3" placeholder="สรุปข้อเสนอแนะหรือเงื่อนไขเพิ่มเติม"></textarea>
+                    <div class="form-text">จำเป็นต้องกรอกเมื่อเลือกขอแก้ไข</div>
+                  </div>
+                  <div class="d-grid d-md-flex justify-content-md-end gap-2">
+                    <button type="submit" class="btn btn-success" data-action="review-work">
+                      <i class="bi bi-check-circle me-1"></i> บันทึกผลการตรวจ
+                    </button>
                   </div>
                   <div class="mb-3">
                     <label class="form-label">ความคิดเห็น</label>
@@ -430,6 +471,7 @@ if ($flashKey !== '') {
                           </div>
                         <?php elseif (($submission['status'] ?? '') === 'pending'): ?>
                           <div class="small text-muted">รอ Director ตรวจสอบ</div>
+                          <div class="small text-muted">รอผู้จัดการตรวจสอบ</div>
                         <?php endif; ?>
                       </div>
                     </div>
@@ -484,22 +526,6 @@ if ($flashKey !== '') {
   if (!root) {
     return;
   }
-
-  const dedupeById = (id) => {
-    const nodes = root.querySelectorAll(`#${id}`);
-    if (nodes.length <= 1) {
-      return;
-    }
-
-    nodes.forEach((node, index) => {
-      if (index > 0) {
-        node.remove();
-      }
-    });
-  };
-
-  dedupeById('submitWorkForm');
-  dedupeById('reviewSubmissionForm');
 
   const taskId = parseInt(root.dataset.taskId || '0', 10);
   const feedback = document.getElementById('taskActionFeedback');
