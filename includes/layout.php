@@ -47,12 +47,16 @@ function render_header(string $title = ''): void
                         <li class="nav-item"><a class="nav-link" href="<?= e(base_url('dashboard.php')) ?>">Dashboard</a></li>
                         <li class="nav-item"><a class="nav-link" href="<?= e(base_url('/tasks/create.php')) ?>">Work order</a></li>
                         <li class="nav-item"><a class="nav-link" href="<?= e(base_url('/tasks/index.php')) ?>">All works</a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?= e(base_url('users/index.php')) ?>">Users</a></li>
                     </ul>
 
                     <ul class="navbar-nav">
                         <?php if ($u): ?>
                             <li class="nav-item me-2"><span class="navbar-text">
                                     สวัสดี, <strong><?= e($u['name']) ?></strong>
+                                    <?php if (!empty($u['position'])): ?>
+                                        <span class="text-white-50 d-none d-lg-inline ms-2">(<?= e($u['position']) ?>)</span>
+                                    <?php endif; ?>
                                 </span></li>
                             <li class="nav-item"><a class="btn btn-sm btn-outline-light" href="<?= e(base_url('logout.php')) ?>">ออกจากระบบ</a></li>
                         <?php else: ?>
