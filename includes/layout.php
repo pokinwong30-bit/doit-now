@@ -47,6 +47,7 @@ function render_header(string $title = ''): void
                         <li class="nav-item"><a class="nav-link" href="<?= e(base_url('dashboard.php')) ?>">Dashboard</a></li>
                         <li class="nav-item"><a class="nav-link" href="<?= e(base_url('/tasks/create.php')) ?>">Work order</a></li>
                         <li class="nav-item"><a class="nav-link" href="<?= e(base_url('/tasks/index.php')) ?>">All works</a></li>
+                        <li class="nav-item"><a class="nav-link" href="<?= e(base_url('users/index.php')) ?>">Users</a></li>
                     </ul>
 
                     <ul class="navbar-nav">
