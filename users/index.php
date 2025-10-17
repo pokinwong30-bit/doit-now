@@ -7,6 +7,23 @@ require_once __DIR__ . '/../includes/csrf.php';
 require_login();
 require_once __DIR__ . '/../includes/layout.php';
 
+$viewer = current_user();
+$allowed_positions = ['manager', 'senior manager'];
+$viewer_position = strtolower(trim((string)($viewer['position'] ?? '')));
+$is_director_level = $viewer_position !== '' && str_contains($viewer_position, 'director');
+
+if (!in_array($viewer_position, $allowed_positions, true) && !$is_director_level) {
+    http_response_code(403);
+    render_header('ไม่มีสิทธิ์เข้าถึง');
+    ?>
+    <div class="alert alert-danger">
+      คุณไม่มีสิทธิ์ในการเข้าถึงหน้ารายชื่อผู้ใช้ จำเป็นต้องมีตำแหน่งอย่างน้อย Manager ขึ้นไป
+    </div>
+    <?php
+    render_footer();
+    exit;
+}
+
 render_header('รายชื่อผู้ใช้งาน');
 
 $stmt = $pdo->query('SELECT id, name, position FROM users ORDER BY name ASC, id ASC');
