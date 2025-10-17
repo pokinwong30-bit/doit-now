@@ -8,11 +8,8 @@ require_login();
 require_once __DIR__ . '/../includes/layout.php';
 
 $viewer = current_user();
-$allowed_positions = ['manager', 'senior manager'];
-$viewer_position = strtolower(trim((string)($viewer['position'] ?? '')));
-$is_director_level = $viewer_position !== '' && str_contains($viewer_position, 'director');
 
-if (!in_array($viewer_position, $allowed_positions, true) && !$is_director_level) {
+if (!is_manager_or_higher($viewer)) {
     http_response_code(403);
     render_header('ไม่มีสิทธิ์เข้าถึง');
     ?>

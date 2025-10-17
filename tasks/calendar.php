@@ -100,6 +100,26 @@ $assignee_q  = trim($_GET['assignee'] ?? ''); // <— ช่องค้นห�
 </div>
 
 <script>
+async function loadTaskDetail(taskId, flash) {
+  const modalBody = document.getElementById('taskModalBody');
+  if (!modalBody) return;
+  modalBody.innerHTML = 'กำลังโหลด...';
+  const params = new URLSearchParams({ id: taskId });
+  if (flash) {
+    params.set('flash', flash);
+  }
+
+  try {
+    const res = await fetch('view.php?' + params.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    modalBody.innerHTML = await res.text();
+  } catch (err) {
+    console.error(err);
+    modalBody.innerHTML = '<div class="text-danger">โหลดรายละเอียดไม่สำเร็จ</div>';
+  }
+}
+
+window.loadTaskDetail = loadTaskDetail;
+
 document.addEventListener('DOMContentLoaded', function(){
   const calendarEl = document.getElementById('calendar');
   const form = document.getElementById('filterForm');
@@ -162,6 +182,18 @@ document.addEventListener('DOMContentLoaded', function(){
   // ถ้ามี task_code ใน extendedProps ใช้เป็นรหัส (เสริมในบรรทัด badge)
   const code = arg.event.extendedProps?.task_code || arg.event.extendedProps?.taskCode || '';
 
+  const submissionStatus = (arg.event.extendedProps?.submission_status || '').toLowerCase();
+  const submissionVersion = arg.event.extendedProps?.submission_version;
+  let statusCfg = null;
+  if (submissionStatus) {
+    const statusMap = {
+      pending: { label: 'รออนุมัติ', cls: 'text-bg-warning text-dark' },
+      revision_required: { label: 'ขอแก้ไข', cls: 'text-bg-danger' },
+      approved: { label: 'ผ่านแล้ว', cls: 'text-bg-success' }
+    };
+    statusCfg = statusMap[submissionStatus] || { label: submissionStatus, cls: 'text-bg-secondary' };
+  }
+
   // ชื่อเรื่อง: ใช้ title จาก event (คุณสามารถส่ง title สั้นมาจาก events.php ก็ได้)
   const title = arg.event.title || '';
 
@@ -185,13 +217,23 @@ document.addEventListener('DOMContentLoaded', function(){
     badges.appendChild(badgeCode);
   }
 
+  if (statusCfg) {
+    const badgeStatus = document.createElement('span');
+    badgeStatus.className = 'badge badge-pill ' + statusCfg.cls;
+    badgeStatus.textContent = statusCfg.label + (submissionVersion ? ` #${submissionVersion}` : '');
+    badges.appendChild(badgeStatus);
+  }
+
   // บรรทัดชื่อเรื่อง (หลายบรรทัดได้)
   const titleEl = document.createElement('p');
   titleEl.className = 'chip-title mb-0';
   titleEl.textContent = title;
 
   // tooltip รวม
-  wrap.title = `${tCfg.label}${code ? ' • '+code : ''} — ${title}`;
+  const tooltipParts = [tCfg.label];
+  if (code) tooltipParts.push(code);
+  if (statusCfg) tooltipParts.push(statusCfg.label + (submissionVersion ? ` #${submissionVersion}` : ''));
+  wrap.title = `${tooltipParts.join(' • ')} — ${title}`;
 
   wrap.appendChild(badges);
   wrap.appendChild(titleEl);
@@ -203,16 +245,9 @@ document.addEventListener('DOMContentLoaded', function(){
       info.jsEvent.preventDefault();
       const id = info.event.extendedProps.task_id;
       if(!id) return;
-      const modalBody = document.getElementById('taskModalBody');
-      modalBody.innerHTML = 'กำลังโหลด...';
-      const myModal = new bootstrap.Modal(document.getElementById('taskModal'));
-      myModal.show();
-      try{
-        const res = await fetch('view.php?id=' + encodeURIComponent(id), { headers:{'X-Requested-With':'XMLHttpRequest'} });
-        modalBody.innerHTML = await res.text();
-      }catch(e){
-        modalBody.innerHTML = '<div class="text-danger">โหลดรายละเอียดไม่สำเร็จ</div>';
-      }
+      const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('taskModal'));
+      modal.show();
+      await loadTaskDetail(id);
     }
   });
 
@@ -223,6 +258,10 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 
   calendar.render();
+
+  window.addEventListener('task-submission-updated', () => {
+    calendar.refetchEvents();
+  });
 });
 </script>
 
