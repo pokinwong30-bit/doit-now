@@ -8,7 +8,7 @@ require_login();
 render_header('Dashboard');
 $u = current_user();
 
-/* นับงานของฉัน (สถานะยังทำอยู่) */
+/* นับงานของฉัน (สถานะยังทำอยู่)ทดสอบ */
 $myAssignedCount = 0;
 try {
     $sql = "SELECT COUNT(*) AS c
