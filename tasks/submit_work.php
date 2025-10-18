@@ -43,6 +43,12 @@ try {
         json_out(['ok' => false, 'error' => 'จำเป็นต้องเข้าสู่ระบบ'], 401);
     }
 
+    $assigneeId = isset($task['assignee_id']) ? (int)$task['assignee_id'] : 0;
+    $isAssignee = $assigneeId > 0 && $assigneeId === (int)$user['id'];
+    if (!$isAssignee && !is_manager_or_higher($user)) {
+        json_out(['ok' => false, 'error' => 'คุณไม่มีสิทธิ์ส่งงานสำหรับรายการนี้'], 403);
+    }
+
     $note = trim((string)($_POST['note'] ?? ''));
     $file = $_FILES['file'] ?? null;
 

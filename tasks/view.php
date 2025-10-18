@@ -31,6 +31,17 @@ $astmt = $pdo->prepare("
 $astmt->execute([$id]);
 $files = $astmt->fetchAll();
 
+$sstmt = $pdo->prepare("
+  SELECT ts.*, sub.name AS submitter_name, rev.name AS reviewer_name
+  FROM task_submissions ts
+  LEFT JOIN users sub ON sub.id = ts.submitter_id
+  LEFT JOIN users rev ON rev.id = ts.reviewed_by
+  WHERE ts.task_id = ?
+  ORDER BY ts.version DESC, ts.id DESC
+");
+$sstmt->execute([$id]);
+$submissions = $sstmt->fetchAll();
+
 /* ---------- Helpers ---------- */
 function th_date_long(?string $dt): string {
   if (!$dt) return '-';
@@ -53,10 +64,47 @@ function human_filesize($bytes, $dec=1){
 }
 function is_image_mime(string $mime): bool { return stripos($mime, 'image/') === 0; }
 
+function submission_status_meta(?string $status): array {
+  return match($status) {
+    'approved' => ['class' => 'text-bg-success', 'label' => 'ผ่านอนุมัติ'],
+    'revision_required' => ['class' => 'text-bg-danger', 'label' => 'ขอแก้ไข'],
+    'pending' => ['class' => 'text-bg-warning text-dark', 'label' => 'รออนุมัติ'],
+    default => ['class' => 'text-bg-secondary', 'label' => 'ยังไม่เคยส่งงาน'],
+  };
+}
+
 /* ---------- Decode JSON fields ---------- */
 $objective    = json_decode((string)$task['objective_json'],    true) ?: [];
 $channels     = json_decode((string)$task['channels_json'],     true) ?: [];
 $deliverables = json_decode((string)$task['deliverables_json'], true) ?: [];
+
+$user = current_user();
+$canReview = is_director_level($user);
+$canReview = is_manager_or_higher($user);
+$assigneeId = (int)($task['assignee_id'] ?? 0);
+$isAssignee = $user && (int)$user['id'] === $assigneeId;
+$canSubmit = $isAssignee || $canReview;
+
+$latestSubmission = $submissions[0] ?? null;
+$nextVersion = $latestSubmission ? ((int)$latestSubmission['version'] + 1) : 1;
+$latestStatus = $latestSubmission['status'] ?? null;
+$hasRevision = $latestStatus === 'revision_required';
+
+$pendingSubmission = null;
+foreach ($submissions as $sub) {
+  if (($sub['status'] ?? '') === 'pending') { $pendingSubmission = $sub; break; }
+}
+
+$flashKey = isset($_GET['flash']) ? trim((string)$_GET['flash']) : '';
+$flashMessage = null;
+if ($flashKey !== '') {
+  $flashMessage = match($flashKey) {
+    'submitted' => ['type' => 'success', 'text' => 'บันทึกการส่งงานเรียบร้อยแล้ว'],
+    'approved'  => ['type' => 'success', 'text' => 'อนุมัติผลงานเรียบร้อยแล้ว'],
+    'revision'  => ['type' => 'warning', 'text' => 'บันทึกคำขอแก้ไขงานแล้ว'],
+    default     => null,
+  };
+}
 ?>
 <div class="container-fluid">
   <div class="row g-3">
@@ -232,9 +280,208 @@ $deliverables = json_decode((string)$task['deliverables_json'], true) ?: [];
 
     </div>
 
-    <!-- RIGHT: attachments -->
+    <!-- RIGHT: submissions & attachments -->
     <div class="col-lg-4">
-      <div class="d-flex flex-column gap-3">
+      <div id="taskDetailRoot" class="d-flex flex-column gap-3" data-task-id="<?= (int)$task['id'] ?>">
+        <div class="card shadow-sm border-0">
+          <div class="card-header bg-light fw-semibold d-flex justify-content-between align-items-center">
+            <span>การส่งงาน</span>
+            <span class="badge bg-secondary">ครั้งถัดไป #<?= (int)$nextVersion ?></span>
+          </div>
+          <div class="card-body">
+            <div id="taskActionFeedback"></div>
+
+            <?php if ($flashMessage): ?>
+              <div class="alert alert-<?= e($flashMessage['type']) ?>">
+                <?= e($flashMessage['text']) ?>
+              </div>
+            <?php endif; ?>
+
+            <?php if ($latestSubmission): ?>
+              <?php $meta = submission_status_meta($latestSubmission['status'] ?? null); ?>
+              <div class="mb-3">
+                <span class="badge badge-pill <?= e($meta['class']) ?>">
+                  <?= e($meta['label']) ?> (ครั้งที่ <?= (int)$latestSubmission['version'] ?>)
+                </span>
+                <div class="small text-muted mt-2">
+                  ส่งเมื่อ <?= e(th_date_long($latestSubmission['created_at'] ?? null)) ?>
+                </div>
+                <?php if (!empty($latestSubmission['review_comment'])): ?>
+                  <div class="small text-muted mt-1">ความคิดเห็น: <?= e($latestSubmission['review_comment']) ?></div>
+                <?php endif; ?>
+                <?php if (!empty($latestSubmission['reviewer_name'])): ?>
+                  <div class="small text-muted">
+                    โดย <?= e($latestSubmission['reviewer_name']) ?>
+                    <?php if (!empty($latestSubmission['reviewed_at'])): ?>
+                      — <?= e(th_date_long($latestSubmission['reviewed_at'])) ?>
+                    <?php endif; ?>
+                  </div>
+                <?php endif; ?>
+              </div>
+            <?php else: ?>
+              <div class="text-muted mb-3">ยังไม่มีการส่งงาน</div>
+            <?php endif; ?>
+
+            <?php if ($hasRevision && !empty($latestSubmission['review_comment'])): ?>
+              <div class="alert alert-warning">
+                งานล่าสุดถูกขอให้แก้ไข: <?= e($latestSubmission['review_comment']) ?>
+              </div>
+            <?php elseif ($hasRevision): ?>
+              <div class="alert alert-warning">
+                งานล่าสุดถูกขอให้แก้ไข กรุณาส่งฉบับถัดไป
+              </div>
+            <?php endif; ?>
+
+            <form id="submitWorkForm" method="post" enctype="multipart/form-data" class="border rounded p-3 bg-light-subtle">
+              <?= csrf_field('submit_work_' . $task['id']) ?>
+              <input type="hidden" name="task_id" value="<?= (int)$task['id'] ?>">
+              <div class="mb-3">
+                <label class="form-label">ไฟล์ผลงาน</label>
+                <input type="file" name="file" class="form-control">
+                <div class="form-text">รองรับไฟล์ภาพ วิดีโอ PDF และไฟล์งาน Adobe (สูงสุด 200MB)</div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">คำอธิบาย / โน้ตเพิ่มเติม</label>
+                <textarea name="note" class="form-control" rows="3" placeholder="สรุปสิ่งที่เปลี่ยนแปลง หรือแนบลิงก์ประกอบ"></textarea>
+                <div class="form-text">หากไม่มีไฟล์ สามารถส่งเฉพาะข้อความได้</div>
+              </div>
+              <div class="d-grid d-md-flex justify-content-md-end">
+                <button type="submit" class="btn btn-primary" data-action="submit-work">
+                  <i class="bi bi-upload me-1"></i> ส่งงานฉบับใหม่
+                </button>
+              </div>
+            </form>
+            <?php if ($canSubmit): ?>
+              <form id="submitWorkForm" method="post" enctype="multipart/form-data" class="border rounded p-3 bg-light-subtle">
+                <?= csrf_field('submit_work_' . $task['id']) ?>
+                <input type="hidden" name="task_id" value="<?= (int)$task['id'] ?>">
+                <div class="mb-3">
+                  <label class="form-label">ไฟล์ผลงาน</label>
+                  <input type="file" name="file" class="form-control">
+                  <div class="form-text">รองรับไฟล์ภาพ วิดีโอ PDF และไฟล์งาน Adobe (สูงสุด 200MB)</div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">คำอธิบาย / โน้ตเพิ่มเติม</label>
+                  <textarea name="note" class="form-control" rows="3" placeholder="สรุปสิ่งที่เปลี่ยนแปลง หรือแนบลิงก์ประกอบ"></textarea>
+                  <div class="form-text">หากไม่มีไฟล์ สามารถส่งเฉพาะข้อความได้</div>
+                </div>
+                <div class="d-grid d-md-flex justify-content-md-end">
+                  <button type="submit" class="btn btn-primary" data-action="submit-work">
+                    <i class="bi bi-upload me-1"></i> ส่งงานฉบับใหม่
+                  </button>
+                </div>
+              </form>
+            <?php else: ?>
+              <div class="text-muted">เฉพาะผู้รับมอบหมายหรือตำแหน่งผู้จัดการขึ้นไปเท่านั้นที่สามารถส่งงานได้</div>
+            <?php endif; ?>
+
+            <?php if ($canReview): ?>
+              <?php if ($pendingSubmission): ?>
+                <hr class="my-4">
+                <h6 class="fw-semibold mb-3">ตรวจงานล่าสุด (ครั้งที่ <?= (int)$pendingSubmission['version'] ?>)</h6>
+                <form id="reviewSubmissionForm" method="post">
+                  <?= csrf_field('review_submission_' . $pendingSubmission['id']) ?>
+                  <input type="hidden" name="submission_id" value="<?= (int)$pendingSubmission['id'] ?>">
+                  <input type="hidden" name="task_id" value="<?= (int)$task['id'] ?>">
+                  <div class="mb-3">
+                    <label class="form-label">ผลการตรวจ</label>
+                    <div class="form-check">
+                      <input class="form-check-input" type="radio" name="status" id="statusApprove" value="approved" required>
+                      <label class="form-check-label" for="statusApprove">อนุมัติ</label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="radio" name="status" id="statusRevision" value="revision_required">
+                      <label class="form-check-label" for="statusRevision">ขอแก้ไข</label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="radio" name="status" id="statusRevision" value="revision_required">
+                      <label class="form-check-label" for="statusRevision">ขอแก้ไข</label>
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">ความคิดเห็น</label>
+                    <textarea name="comment" class="form-control" rows="3" placeholder="สรุปข้อเสนอแนะหรือเงื่อนไขเพิ่มเติม"></textarea>
+                    <div class="form-text">จำเป็นต้องกรอกเมื่อเลือกขอแก้ไข</div>
+                  </div>
+                  <div class="d-grid d-md-flex justify-content-md-end gap-2">
+                    <button type="submit" class="btn btn-success" data-action="review-work">
+                      <i class="bi bi-check-circle me-1"></i> บันทึกผลการตรวจ
+                    </button>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">ความคิดเห็น</label>
+                    <textarea name="comment" class="form-control" rows="3" placeholder="สรุปข้อเสนอแนะหรือเงื่อนไขเพิ่มเติม"></textarea>
+                    <div class="form-text">จำเป็นต้องกรอกเมื่อเลือกขอแก้ไข</div>
+                  </div>
+                  <div class="d-grid d-md-flex justify-content-md-end gap-2">
+                    <button type="submit" class="btn btn-success" data-action="review-work">
+                      <i class="bi bi-check-circle me-1"></i> บันทึกผลการตรวจ
+                    </button>
+                  </div>
+                </form>
+              <?php elseif ($latestSubmission): ?>
+                <hr class="my-4">
+                <div class="text-muted">ไม่มีงานที่รอตรวจในขณะนี้</div>
+              <?php endif; ?>
+            <?php endif; ?>
+
+            <?php if ($submissions): ?>
+              <div class="mt-4">
+                <h6 class="fw-semibold mb-3">ประวัติการส่งงาน</h6>
+                <div class="list-group" id="submissionList">
+                  <?php foreach ($submissions as $submission): ?>
+                    <?php $metaRow = submission_status_meta($submission['status'] ?? null); ?>
+                    <div class="list-group-item">
+                      <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                          <span class="badge text-bg-secondary me-2">ครั้งที่ <?= (int)$submission['version'] ?></span>
+                          <span class="fw-semibold"><?= e($submission['submitter_name'] ?: 'ไม่ทราบชื่อ') ?></span>
+                        </div>
+                        <small class="text-muted"><?= e(th_date_long($submission['created_at'] ?? null)) ?></small>
+                      </div>
+                      <?php if (!empty($submission['note'])): ?>
+                        <div class="mt-2"><?= nl2br(e($submission['note'])) ?></div>
+                      <?php endif; ?>
+                      <?php if (!empty($submission['file_path'])): ?>
+                        <div class="mt-2 d-flex flex-column">
+                          <div>
+                            <a class="btn btn-sm btn-outline-primary" href="<?= e(base_url($submission['file_path'])) ?>" target="_blank">
+                              <i class="bi bi-paperclip me-1"></i> ดาวน์โหลดไฟล์
+                            </a>
+                          </div>
+                          <div class="small text-muted mt-1">
+                            <?= e($submission['original_name'] ?: 'ไม่ระบุชื่อไฟล์') ?>
+                            <?php if (!empty($submission['size_bytes'])): ?>
+                              • <?= e(human_filesize((int)$submission['size_bytes'])) ?>
+                            <?php endif; ?>
+                          </div>
+                        </div>
+                      <?php endif; ?>
+                      <div class="mt-3">
+                        <span class="badge badge-pill <?= e($metaRow['class']) ?>"><?= e($metaRow['label']) ?></span>
+                        <?php if (!empty($submission['review_comment'])): ?>
+                          <div class="small text-muted mt-1">ความคิดเห็น: <?= e($submission['review_comment']) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($submission['reviewer_name'])): ?>
+                          <div class="small text-muted">
+                            โดย <?= e($submission['reviewer_name']) ?>
+                            <?php if (!empty($submission['reviewed_at'])): ?>
+                              — <?= e(th_date_long($submission['reviewed_at'])) ?>
+                            <?php endif; ?>
+                          </div>
+                        <?php elseif (($submission['status'] ?? '') === 'pending'): ?>
+                          <div class="small text-muted">รอ Director ตรวจสอบ</div>
+                          <div class="small text-muted">รอผู้จัดการตรวจสอบ</div>
+                        <?php endif; ?>
+                      </div>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            <?php endif; ?>
+          </div>
+        </div>
+
         <div class="card shadow-sm border-0">
           <div class="card-header bg-light fw-semibold">ไฟล์แนบ / รูปอ้างอิง</div>
           <div class="card-body">
@@ -272,3 +519,111 @@ $deliverables = json_decode((string)$task['deliverables_json'], true) ?: [];
     </div>
   </div>
 </div>
+
+<script>
+(() => {
+  const root = document.getElementById('taskDetailRoot');
+  if (!root) {
+    return;
+  }
+
+  const taskId = parseInt(root.dataset.taskId || '0', 10);
+  const feedback = document.getElementById('taskActionFeedback');
+
+  const showAlert = (type, message) => {
+    if (!feedback) return;
+    feedback.innerHTML = '';
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${type}`;
+    alert.textContent = message;
+    feedback.appendChild(alert);
+  };
+
+  const clearAlert = () => {
+    if (feedback) {
+      feedback.innerHTML = '';
+    }
+  };
+
+  const dispatchUpdate = (summary) => {
+    window.dispatchEvent(new CustomEvent('task-submission-updated', {
+      detail: { taskId, summary }
+    }));
+  };
+
+  const handleError = (fallbackMessage, error) => {
+    console.error(error);
+    showAlert('danger', fallbackMessage);
+  };
+
+  const submitForm = document.getElementById('submitWorkForm');
+  if (submitForm) {
+    submitForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearAlert();
+      const button = submitForm.querySelector('button[type="submit"]');
+      if (button) button.disabled = true;
+
+      try {
+        const formData = new FormData(submitForm);
+        formData.set('task_id', String(taskId));
+        const response = await fetch('submit_work.php', {
+          method: 'POST',
+          body: formData,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          showAlert('danger', data.error || 'ไม่สามารถส่งงานได้');
+        } else {
+          dispatchUpdate(data.summary || null);
+          if (typeof window.loadTaskDetail === 'function') {
+            await window.loadTaskDetail(taskId, data.flash || 'submitted');
+          } else {
+            window.location.reload();
+          }
+        }
+      } catch (err) {
+        handleError('เกิดข้อผิดพลาด ไม่สามารถส่งงานได้', err);
+      } finally {
+        if (button) button.disabled = false;
+      }
+    });
+  }
+
+  const reviewForm = document.getElementById('reviewSubmissionForm');
+  if (reviewForm) {
+    reviewForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearAlert();
+      const button = reviewForm.querySelector('button[type="submit"]');
+      if (button) button.disabled = true;
+
+      try {
+        const formData = new FormData(reviewForm);
+        formData.set('task_id', String(taskId));
+        const response = await fetch('review_submission.php', {
+          method: 'POST',
+          body: formData,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          showAlert('danger', data.error || 'ไม่สามารถบันทึกผลการตรวจงานได้');
+        } else {
+          dispatchUpdate(data.summary || null);
+          if (typeof window.loadTaskDetail === 'function') {
+            await window.loadTaskDetail(taskId, data.flash || 'approved');
+          } else {
+            window.location.reload();
+          }
+        }
+      } catch (err) {
+        handleError('เกิดข้อผิดพลาด ไม่สามารถบันทึกผลการตรวจงานได้', err);
+      } finally {
+        if (button) button.disabled = false;
+      }
+    });
+  }
+})();
+</script>
