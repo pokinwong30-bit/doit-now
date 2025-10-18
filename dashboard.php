@@ -26,6 +26,7 @@ try {
 $pendingCount = 0;
 $dueThisWeekCount = 0;
 $updatedTodayCount = 0;
+$recentActivities = [];
 
 try {
     $sql = "SELECT COUNT(*) AS c
@@ -73,6 +74,123 @@ try {
     $updatedTodayCount = (int)($stmt->fetch()['c'] ?? 0);
 } catch (Throwable $e) {
     $updatedTodayCount = 0;
+}
+
+try {
+    $sql = "SELECT * FROM (
+                SELECT 'task_created' AS event_type,
+                       t.created_at     AS event_time,
+                       t.id             AS task_id,
+                       t.title          AS task_title,
+                       t.task_code      AS task_code,
+                       req.name         AS actor_name,
+                       NULL             AS status,
+                       NULL             AS submission_version
+                FROM tasks t
+                LEFT JOIN users req ON req.id = t.requester_id
+
+                UNION ALL
+
+                SELECT 'submission_created' AS event_type,
+                       ts.created_at        AS event_time,
+                       ts.task_id           AS task_id,
+                       t.title              AS task_title,
+                       t.task_code          AS task_code,
+                       sub.name             AS actor_name,
+                       ts.status            AS status,
+                       ts.version           AS submission_version
+                FROM task_submissions ts
+                INNER JOIN tasks t ON t.id = ts.task_id
+                LEFT JOIN users sub ON sub.id = ts.submitter_id
+
+                UNION ALL
+
+                SELECT 'submission_reviewed' AS event_type,
+                       ts.reviewed_at        AS event_time,
+                       ts.task_id            AS task_id,
+                       t.title               AS task_title,
+                       t.task_code           AS task_code,
+                       rev.name              AS actor_name,
+                       ts.status             AS status,
+                       ts.version            AS submission_version
+                FROM task_submissions ts
+                INNER JOIN tasks t ON t.id = ts.task_id
+                LEFT JOIN users rev ON rev.id = ts.reviewed_by
+                WHERE ts.reviewed_at IS NOT NULL
+            ) AS recent
+            WHERE event_time IS NOT NULL
+            ORDER BY event_time DESC
+            LIMIT 4";
+    $stmt = $pdo->query($sql);
+    $recentActivities = $stmt->fetchAll();
+} catch (Throwable $e) {
+    $recentActivities = [];
+}
+
+function thai_time_ago(?string $datetime, DateTimeZone $tz): string
+{
+    if (!$datetime) {
+        return '';
+    }
+
+    try {
+        $moment = new DateTime($datetime, $tz);
+    } catch (Throwable $e) {
+        return '';
+    }
+
+    $now = new DateTime('now', $tz);
+    $diff = $now->diff($moment);
+
+    if ((int)$diff->y > 0) {
+        return $diff->y . ' ปีที่แล้ว';
+    }
+    if ((int)$diff->m > 0) {
+        return $diff->m . ' เดือนที่แล้ว';
+    }
+    if ((int)$diff->d > 0) {
+        return $diff->d . ' วันที่แล้ว';
+    }
+    if ((int)$diff->h > 0) {
+        return $diff->h . ' ชม.ที่แล้ว';
+    }
+    if ((int)$diff->i > 0) {
+        return $diff->i . ' นาทีที่แล้ว';
+    }
+
+    return 'ไม่กี่วินาทีที่แล้ว';
+}
+
+function format_activity_message(array $activity): string
+{
+    $taskId = isset($activity['task_id']) ? (int)$activity['task_id'] : 0;
+    $taskTitle = trim((string)($activity['task_title'] ?? ''));
+    $taskCode = trim((string)($activity['task_code'] ?? ''));
+    $taskLabel = $taskTitle !== '' ? '“' . e($taskTitle) . '”' : ($taskCode !== '' ? 'งาน ' . e($taskCode) : 'งานที่ไม่ระบุชื่อ');
+
+    if ($taskId > 0) {
+        $taskUrl = base_url('tasks/view.php?id=' . $taskId);
+        $taskLabel = '<a href="' . e($taskUrl) . '" class="text-decoration-none">' . $taskLabel . '</a>';
+    }
+
+    $actor = trim((string)($activity['actor_name'] ?? ''));
+    $actorLabel = $actor !== '' ? e($actor) : 'ระบบ';
+
+    $version = isset($activity['submission_version']) ? (int)$activity['submission_version'] : null;
+    $versionText = $version && $version > 0 ? ' รอบที่ ' . e((string)$version) : '';
+
+    $status = (string)($activity['status'] ?? '');
+
+    return match ($activity['event_type'] ?? '') {
+        'task_created' => $actorLabel . ' สร้างงาน ' . $taskLabel,
+        'submission_created' => $actorLabel . ' ส่งงาน' . $versionText . ' ใน ' . $taskLabel,
+        'submission_reviewed' => match ($status) {
+            'approved' => $actorLabel . ' อนุมัติผลงาน' . $versionText . ' ใน ' . $taskLabel,
+            'revision_required' => $actorLabel . ' ขอแก้ไขผลงาน' . $versionText . ' ใน ' . $taskLabel,
+            default => $actorLabel . ' ตรวจงาน' . $versionText . ' ใน ' . $taskLabel,
+        },
+        default => $actorLabel . ' อัปเดต ' . $taskLabel,
+    };
 }
 
 $stats = [
@@ -150,11 +268,22 @@ $stats = [
     <div class="card shadow-sm border-0 h-100">
       <div class="card-header bg-light fw-semibold">กิจกรรมล่าสุด</div>
       <div class="card-body">
+        <?php if ($recentActivities): ?>
         <ul class="timeline list-unstyled mb-0">
-          <li><span class="dot"></span> คุณอัปเดตงาน “เตรียมเอกสารลูกค้า A” <span class="text-muted small">2 ชม.ที่แล้ว</span></li>
-          <li><span class="dot"></span> มอบหมายงาน “สรุปรายงานประจำสัปดาห์” ให้คุณ <span class="text-muted small">เมื่อวาน</span></li>
-          <li><span class="dot"></span> งาน “ประชุมแผน Q4” ถูกปิดสำเร็จ <span class="text-muted small">2 วันก่อน</span></li>
+          <?php foreach ($recentActivities as $activity): ?>
+          <?php $timeLabel = thai_time_ago($activity['event_time'] ?? null, $tz); ?>
+          <li>
+            <span class="dot"></span>
+            <?= format_activity_message($activity) ?>
+            <?php if ($timeLabel !== ''): ?>
+            <span class="text-muted small"><?= e($timeLabel) ?></span>
+            <?php endif; ?>
+          </li>
+          <?php endforeach; ?>
         </ul>
+        <?php else: ?>
+        <p class="text-muted mb-0">ยังไม่มีกิจกรรมล่าสุด</p>
+        <?php endif; ?>
       </div>
     </div>
   </div>
