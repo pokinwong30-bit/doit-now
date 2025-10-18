@@ -7,6 +7,9 @@ require_once __DIR__ . '/../includes/csrf.php';
 require_login();
 require_once __DIR__ . '/../includes/layout.php';
 
+$currentUser = current_user();
+$canReviewSubmissions = is_manager_or_higher($currentUser);
+
 render_header('ตารางงานรวม');
 
 /* ---------- รับค่า filter ---------- */

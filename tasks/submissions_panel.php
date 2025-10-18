@@ -41,16 +41,23 @@ $sstmt->execute([$taskId]);
 $submissions = $sstmt->fetchAll();
 
 $user = current_user();
-$canReview = $user ? is_director_level($user) : false;
+$canReview = $user ? is_manager_or_higher($user) : false;
 
 $latestSubmission = $submissions[0] ?? null;
 $nextVersion = $latestSubmission ? ((int)$latestSubmission['version'] + 1) : 1;
 
-$pendingSubmission = null;
+$pendingSubmissions = [];
 foreach ($submissions as $submission) {
     if (($submission['status'] ?? '') === 'pending') {
-        $pendingSubmission = $submission;
-        break;
+        $pendingSubmissions[] = $submission;
+    }
+}
+$firstPendingSubmission = $pendingSubmissions[0] ?? null;
+
+$reviewTokens = [];
+if ($canReview && $pendingSubmissions) {
+    foreach ($pendingSubmissions as $submission) {
+        $reviewTokens[(int)$submission['id']] = csrf_token('review_submission_' . $submission['id']);
     }
 }
 
@@ -142,20 +149,25 @@ function submission_status_meta(?string $status): array
   <?php if ($canReview): ?>
     <div class="card shadow-sm border-0 mb-4">
       <div class="card-body">
-        <h6 class="fw-semibold mb-3">ตรวจงานล่าสุด</h6>
-        <?php if ($pendingSubmission): ?>
-          <div class="alert alert-info d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-2">
+        <h6 class="fw-semibold mb-3">ตรวจงาน</h6>
+        <?php if ($pendingSubmissions): ?>
+          <div class="alert alert-info d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-2 mb-3" data-role="review-empty">
             <div>
-              <div><strong>ครั้งที่ <?= (int)$pendingSubmission['version'] ?></strong> ส่งเมื่อ <?= e(th_date_long($pendingSubmission['created_at'] ?? null)) ?></div>
-              <div class="small text-muted">โดย <?= e($pendingSubmission['submitter_name'] ?: 'ไม่ทราบชื่อ') ?></div>
+              <div><strong>คลิกการ์ดที่สถานะ "รออนุมัติ"</strong> เพื่อบันทึกผลการตรวจงาน</div>
+              <div class="small text-muted">มีงานรอตรวจ <?= count($pendingSubmissions) ?> รายการ</div>
             </div>
-            <span class="badge text-bg-warning text-dark">รอตรวจ</span>
+            <i class="bi bi-hand-index-thumb fs-3 text-info"></i>
           </div>
-          <form id="taskReviewForm" method="post" class="border rounded p-3 bg-light-subtle">
-            <?= csrf_field('review_submission_' . $pendingSubmission['id']) ?>
-            <input type="hidden" name="submission_id" value="<?= (int)$pendingSubmission['id'] ?>">
+          <form id="taskReviewForm" method="post" class="border rounded p-3 bg-light-subtle d-none" data-role="review-form">
+            <input type="hidden" name="_csrf" value="">
+            <input type="hidden" name="submission_id" value="">
             <input type="hidden" name="task_id" value="<?= (int)$task['id'] ?>">
             <input type="hidden" name="status" value="">
+            <div class="mb-3">
+              <div class="fw-semibold mb-1">การส่งงานครั้งที่ <span data-role="selected-version">-</span></div>
+              <div class="small text-muted" data-role="selected-submitter"></div>
+              <div class="small text-muted" data-role="selected-sent-at"></div>
+            </div>
             <div class="mb-3">
               <label class="form-label">ความคิดเห็น</label>
               <textarea name="comment" class="form-control" rows="3" placeholder="สรุปข้อเสนอแนะหรือเงื่อนไขเพิ่มเติม"></textarea>
@@ -171,12 +183,15 @@ function submission_status_meta(?string $status): array
             </div>
           </form>
         <?php else: ?>
-          <div class="text-muted">ไม่มีงานที่รอตรวจในขณะนี้</div>
+          <div class="alert alert-success mb-0">ไม่มีงานที่รอตรวจในขณะนี้</div>
         <?php endif; ?>
       </div>
     </div>
-  <?php elseif ($pendingSubmission): ?>
-    <div class="alert alert-info">งานล่าสุดกำลังรอ Director ตรวจสอบ</div>
+  <?php elseif ($firstPendingSubmission): ?>
+    <div class="alert alert-info">
+      <div><strong>ครั้งที่ <?= (int)$firstPendingSubmission['version'] ?></strong> ส่งเมื่อ <?= e(th_date_long($firstPendingSubmission['created_at'] ?? null)) ?></div>
+      <div class="small text-muted">โดย <?= e($firstPendingSubmission['submitter_name'] ?: 'ไม่ทราบชื่อ') ?> — รอผู้จัดการตรวจสอบ</div>
+    </div>
   <?php endif; ?>
 
   <div class="mb-3 d-flex justify-content-between align-items-center">
@@ -187,17 +202,45 @@ function submission_status_meta(?string $status): array
   <?php if ($submissions): ?>
     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
       <?php foreach ($submissions as $submission): ?>
-        <?php $meta = submission_status_meta($submission['status'] ?? null); ?>
+        <?php
+          $meta = submission_status_meta($submission['status'] ?? null);
+          $status = (string)($submission['status'] ?? '');
+          $isPending = $status === 'pending';
+          $cardClasses = 'card h-100 shadow-sm border ' . $meta['border'] . ' submission-card';
+          if ($canReview && $isPending) {
+              $cardClasses .= ' submission-card--actionable';
+          }
+          $submissionId = (int)$submission['id'];
+          $submitterName = $submission['submitter_name'] ?: 'ไม่ทราบชื่อ';
+          $submittedText = th_date_long($submission['created_at'] ?? null);
+          $reviewToken = $reviewTokens[$submissionId] ?? '';
+        ?>
         <div class="col">
-          <div class="card h-100 shadow-sm border <?= e($meta['border']) ?>">
+          <div
+            class="<?= e($cardClasses) ?>"
+            data-role="submission-card"
+            data-submission-id="<?= $submissionId ?>"
+            data-status="<?= e($status) ?>"
+            data-version="<?= e((string)($submission['version'] ?? '')) ?>"
+            data-submitter="<?= e($submitterName) ?>"
+            data-created-at-text="<?= e($submittedText) ?>"
+            data-review-token="<?= e($reviewToken) ?>"
+          >
             <div class="card-body d-flex flex-column">
               <div class="d-flex justify-content-between align-items-start mb-3">
                 <div>
                   <span class="badge text-bg-secondary me-2">ครั้งที่ <?= (int)$submission['version'] ?></span>
-                  <span class="fw-semibold"><?= e($submission['submitter_name'] ?: 'ไม่ทราบชื่อ') ?></span>
+                  <span class="fw-semibold"><?= e($submitterName) ?></span>
                 </div>
-                <small class="text-muted text-end"><?= e(th_date_long($submission['created_at'] ?? null)) ?></small>
+                <small class="text-muted text-end"><?= e($submittedText) ?></small>
               </div>
+
+              <?php if ($canReview && $isPending): ?>
+                <div class="alert alert-warning py-2 small d-flex align-items-center gap-2">
+                  <i class="bi bi-hand-index-thumb"></i>
+                  <span>คลิกการ์ดนี้เพื่อตรวจงาน</span>
+                </div>
+              <?php endif; ?>
 
               <?php if (!empty($submission['note'])): ?>
                 <div class="mb-3">
@@ -234,7 +277,7 @@ function submission_status_meta(?string $status): array
                     <?php endif; ?>
                   </div>
                 <?php elseif (($submission['status'] ?? '') === 'pending'): ?>
-                  <div class="small text-muted mt-1">รอ Director ตรวจสอบ</div>
+                  <div class="small text-muted mt-1">รอผู้จัดการตรวจสอบ</div>
                 <?php endif; ?>
               </div>
             </div>
@@ -246,6 +289,26 @@ function submission_status_meta(?string $status): array
     <div class="text-muted">ยังไม่มีการส่งงาน</div>
   <?php endif; ?>
 </div>
+
+<?php if ($canReview): ?>
+<style>
+  #taskSubmissionRoot .submission-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  #taskSubmissionRoot .submission-card--actionable {
+    cursor: pointer;
+  }
+  #taskSubmissionRoot .submission-card--actionable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08);
+  }
+  #taskSubmissionRoot .submission-card--selected {
+    border-width: 2px;
+    border-color: var(--bs-primary) !important;
+    box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.12);
+  }
+</style>
+<?php endif; ?>
 
 <script>
 (() => {
@@ -260,6 +323,9 @@ function submission_status_meta(?string $status): array
   }
 
   const feedback = root.querySelector('[data-role="feedback"]');
+  const reviewEmpty = root.querySelector('[data-role="review-empty"]');
+  const submissionCards = root.querySelectorAll('[data-role="submission-card"]');
+  const reviewForm = document.getElementById('taskReviewForm');
 
   const showAlert = (type, message) => {
     if (!feedback) return;
@@ -321,13 +387,79 @@ function submission_status_meta(?string $status): array
     });
   }
 
-  const reviewForm = document.getElementById('taskReviewForm');
   if (reviewForm) {
     const statusInput = reviewForm.querySelector('input[name="status"]');
+    const csrfInput = reviewForm.querySelector('input[name="_csrf"]');
+    const submissionInput = reviewForm.querySelector('input[name="submission_id"]');
+    const commentField = reviewForm.querySelector('textarea[name="comment"]');
+    const selectedVersionEl = reviewForm.querySelector('[data-role="selected-version"]');
+    const selectedSubmitterEl = reviewForm.querySelector('[data-role="selected-submitter"]');
+    const selectedSentAtEl = reviewForm.querySelector('[data-role="selected-sent-at"]');
     const reviewButtons = reviewForm.querySelectorAll('button[data-status]');
+
+    const resetReviewButtons = () => {
+      reviewButtons.forEach((button) => button.classList.remove('active'));
+    };
+
+    const prepareReviewForm = (card) => {
+      const token = card.dataset.reviewToken || '';
+      if (!token) {
+        showAlert('danger', 'ไม่พบโทเคนสำหรับบันทึกผลการตรวจงาน กรุณารีเฟรชหน้านี้');
+        return;
+      }
+
+      clearAlert();
+      reviewForm.dataset.status = '';
+      if (statusInput) {
+        statusInput.value = '';
+      }
+      if (csrfInput) {
+        csrfInput.value = token;
+      }
+      if (submissionInput) {
+        submissionInput.value = card.dataset.submissionId || '';
+      }
+      if (commentField) {
+        commentField.value = '';
+      }
+      if (selectedVersionEl) {
+        selectedVersionEl.textContent = card.dataset.version || '-';
+      }
+      if (selectedSubmitterEl) {
+        const submitter = card.dataset.submitter || '';
+        selectedSubmitterEl.textContent = submitter ? `โดย ${submitter}` : '';
+      }
+      if (selectedSentAtEl) {
+        const sentText = card.dataset.createdAtText || '';
+        selectedSentAtEl.textContent = sentText ? `ส่งเมื่อ ${sentText}` : '';
+      }
+
+      resetReviewButtons();
+      submissionCards.forEach((item) => item.classList.remove('submission-card--selected'));
+      card.classList.add('submission-card--selected');
+
+      reviewForm.classList.remove('d-none');
+      if (reviewEmpty) {
+        reviewEmpty.classList.add('d-none');
+      }
+    };
+
+    submissionCards.forEach((card) => {
+      card.addEventListener('click', () => {
+        const status = (card.dataset.status || '').toLowerCase();
+        if (status !== 'pending') {
+          showAlert('info', 'รายการนี้ได้รับการตรวจแล้ว');
+          return;
+        }
+
+        prepareReviewForm(card);
+      });
+    });
 
     reviewButtons.forEach((button) => {
       button.addEventListener('click', () => {
+        reviewButtons.forEach((btn) => btn.classList.remove('active'));
+        button.classList.add('active');
         if (statusInput) {
           statusInput.value = button.dataset.status || '';
         }
@@ -345,7 +477,6 @@ function submission_status_meta(?string $status): array
         return;
       }
 
-      const commentField = reviewForm.querySelector('textarea[name="comment"]');
       const comment = commentField ? commentField.value.trim() : '';
       if (status === 'revision_required' && comment === '') {
         showAlert('warning', 'กรุณากรอกความคิดเห็นเมื่อขอแก้ไขงาน');
