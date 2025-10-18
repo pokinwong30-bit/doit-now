@@ -23,6 +23,58 @@ try {
 }
 
 /* สร้างเมตริก พร้อมลิงก์เฉพาะใบแรก */
+$pendingCount = 0;
+$dueThisWeekCount = 0;
+$updatedTodayCount = 0;
+
+try {
+    $sql = "SELECT COUNT(*) AS c
+            FROM tasks t
+            WHERE t.status NOT IN ('done','cancelled')
+              AND NOT EXISTS (
+                SELECT 1
+                FROM task_submissions ts
+                WHERE ts.task_id = t.id
+              )";
+    $stmt = $pdo->query($sql);
+    $pendingCount = (int)($stmt->fetch()['c'] ?? 0);
+} catch (Throwable $e) {
+    $pendingCount = 0;
+}
+
+$tz = new DateTimeZone('Asia/Bangkok');
+$weekStart = (new DateTime('monday this week', $tz))->setTime(0, 0, 0);
+$weekEnd = (clone $weekStart)->modify('+6 days')->setTime(23, 59, 59);
+$todayStart = (new DateTime('today', $tz))->setTime(0, 0, 0);
+$todayEnd = (clone $todayStart)->setTime(23, 59, 59);
+
+try {
+    $sql = "SELECT COUNT(*) AS c
+            FROM tasks t
+            WHERE t.status NOT IN ('done','cancelled')
+              AND t.due_first_draft BETWEEN ? AND ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$weekStart->format('Y-m-d H:i:s'), $weekEnd->format('Y-m-d H:i:s')]);
+    $dueThisWeekCount = (int)($stmt->fetch()['c'] ?? 0);
+} catch (Throwable $e) {
+    $dueThisWeekCount = 0;
+}
+
+try {
+    $sql = "SELECT COUNT(DISTINCT t.id) AS c
+            FROM tasks t
+            INNER JOIN task_submissions ts ON ts.task_id = t.id
+            WHERE ts.created_at BETWEEN ? AND ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        $todayStart->format('Y-m-d H:i:s'),
+        $todayEnd->format('Y-m-d H:i:s'),
+    ]);
+    $updatedTodayCount = (int)($stmt->fetch()['c'] ?? 0);
+} catch (Throwable $e) {
+    $updatedTodayCount = 0;
+}
+
 $stats = [
   [
     'title' => 'งานที่มอบหมายให้ฉัน',
@@ -30,9 +82,24 @@ $stats = [
     'icon'  => 'bi-person-check',
     'href'  => base_url('tasks/index.php?assignee=' . urlencode($u['name'])) // <— ไปหน้า all work กรองชื่อฉัน
   ],
-  ['title' => 'งานค้าง (รวมทีม)', 'value' => 14, 'icon' => 'bi-hourglass-split', 'href' => null],
-  ['title' => 'ครบกำหนดสัปดาห์นี้', 'value' => 3, 'icon' => 'bi-calendar-week', 'href' => null],
-  ['title' => 'อัปเดตล่าสุดวันนี้', 'value' => 9, 'icon' => 'bi-activity', 'href' => null],
+  [
+    'title' => 'งานค้าง',
+    'value' => $pendingCount,
+    'icon'  => 'bi-hourglass-split',
+    'href'  => base_url('tasks/index.php?dashboard_filter=pending')
+  ],
+  [
+    'title' => 'ครบกำหนดสัปดาห์นี้',
+    'value' => $dueThisWeekCount,
+    'icon'  => 'bi-calendar-week',
+    'href'  => base_url('tasks/index.php?dashboard_filter=due_this_week')
+  ],
+  [
+    'title' => 'อัปเดตล่าสุดวันนี้',
+    'value' => $updatedTodayCount,
+    'icon'  => 'bi-activity',
+    'href'  => base_url('tasks/index.php?dashboard_filter=submitted_today')
+  ],
 ];
 ?>
 <div class="mb-4">
