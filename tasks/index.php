@@ -225,7 +225,7 @@ $to   = min($total, $offset + count($rows));
           <th style="width:140px">วันที่สั่ง</th>
           <th style="width:160px">กำหนดส่ง</th>
           <th style="width:220px">สถานะการส่งงาน</th>
-          <th style="width:140px" class="text-center"><?= $canReviewSubmissions ? 'ตรวจงาน' : 'ส่งงาน' ?></th>
+          <th style="width:140px" class="text-center">ส่งงาน</th>
           <th style="width:200px">ผู้สั่งงาน</th>
         </tr>
       </thead>
@@ -253,11 +253,7 @@ $to   = min($total, $offset + count($rows));
           </td>
           <td class="text-center">
             <button type="button" class="btn btn-sm btn-outline-primary" data-task-id="<?= (int)$r['id'] ?>" onclick="openSubmissionModal(this)">
-              <?php if ($canReviewSubmissions): ?>
-                <i class="bi bi-clipboard-check"></i> ตรวจงาน
-              <?php else: ?>
-                <i class="bi bi-upload"></i> ส่งงาน
-              <?php endif; ?>
+              <i class="bi bi-upload"></i> ส่งงาน
             </button>
           </td>
           <td><?= e($r['requester_name'] ?: '-') ?></td>
