@@ -80,7 +80,6 @@ $deliverables = json_decode((string)$task['deliverables_json'], true) ?: [];
 
 $user = current_user();
 $canReview = is_director_level($user);
-$canReview = is_manager_or_higher($user);
 $assigneeId = (int)($task['assignee_id'] ?? 0);
 $isAssignee = $user && (int)$user['id'] === $assigneeId;
 $canSubmit = $isAssignee || $canReview;
