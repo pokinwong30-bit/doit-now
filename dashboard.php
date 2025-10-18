@@ -39,6 +39,9 @@ $stats = [
   <div class="p-4 rounded-3 bg-maroon text-white shadow-sm d-flex justify-content-between align-items-center">
     <div>
       <h2 class="mb-1">ยินดีต้อนรับ, <?= e($u['name']) ?></h2>
+      <?php if (!empty($u['position'])): ?>
+      <p class="mb-1 text-white-50">ตำแหน่ง: <?= e($u['position']) ?></p>
+      <?php endif; ?>
       <p class="mb-0 text-white-50">นี่คือศูนย์กลางงานภายในทีม คุณสามารถดูภาพรวมและลัดไปยังหน้าที่ต้องการได้</p>
     </div>
     <div class="d-none d-md-block display-6 opacity-75">

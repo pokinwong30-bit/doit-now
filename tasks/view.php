@@ -3,6 +3,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/guard.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/csrf.php';
 require_login();
 
 $id = (int)($_GET['id'] ?? 0);
@@ -233,37 +234,47 @@ $deliverables = json_decode((string)$task['deliverables_json'], true) ?: [];
 
     <!-- RIGHT: attachments -->
     <div class="col-lg-4">
-      <div class="card shadow-sm border-0 h-100">
-        <div class="card-header bg-light fw-semibold">ไฟล์แนบ / รูปอ้างอิง</div>
-        <div class="card-body">
-          <?php if (!$files): ?>
-            <div class="text-muted">ไม่มีไฟล์แนบ</div>
-          <?php else: ?>
-            <div class="row g-2">
-              <?php foreach ($files as $f): ?>
-                <div class="col-6">
-                  <div class="border rounded p-2 h-100">
-                    <?php if (is_image_mime((string)$f['mime'])): ?>
-                      <a href="<?= e(base_url($f['file_path'])) ?>" target="_blank">
-                        <img src="<?= e(base_url($f['file_path'])) ?>" class="img-fluid rounded" alt="<?= e($f['original_name']) ?>">
-                      </a>
-                    <?php else: ?>
-                      <div class="small mb-1">
-                        <i class="bi bi-paperclip me-1"></i><?= e($f['original_name']) ?>
+      <div class="d-flex flex-column gap-3">
+        <div class="card shadow-sm border-0">
+          <div class="card-header bg-light fw-semibold">การส่งงาน</div>
+          <div class="card-body text-muted">
+            <p class="mb-2">การส่งงานและประวัติการส่งถูกย้ายไปที่ปุ่ม <strong>“ส่งงาน”</strong> ในตารางรวมงาน.</p>
+            <p class="mb-0 small">กดปุ่มดังกล่าวเพื่ออัปโหลดไฟล์หรือดูความคืบหน้าการตรวจอนุมัติล่าสุดได้ทันที.</p>
+          </div>
+        </div>
+
+        <div class="card shadow-sm border-0">
+          <div class="card-header bg-light fw-semibold">ไฟล์แนบ / รูปอ้างอิง</div>
+          <div class="card-body">
+            <?php if (!$files): ?>
+              <div class="text-muted">ไม่มีไฟล์แนบ</div>
+            <?php else: ?>
+              <div class="row g-2">
+                <?php foreach ($files as $f): ?>
+                  <div class="col-6">
+                    <div class="border rounded p-2 h-100">
+                      <?php if (is_image_mime((string)$f['mime'])): ?>
+                        <a href="<?= e(base_url($f['file_path'])) ?>" target="_blank">
+                          <img src="<?= e(base_url($f['file_path'])) ?>" class="img-fluid rounded" alt="<?= e($f['original_name']) ?>">
+                        </a>
+                      <?php else: ?>
+                        <div class="small mb-1">
+                          <i class="bi bi-paperclip me-1"></i><?= e($f['original_name']) ?>
+                        </div>
+                        <div class="small text-muted"><?= e(human_filesize((int)$f['size_bytes'])) ?></div>
+                      <?php endif; ?>
+                      <?php if (!empty($f['caption'])): ?>
+                        <div class="small text-muted mt-1"><?= e($f['caption']) ?></div>
+                      <?php endif; ?>
+                      <div class="mt-1">
+                        <a class="btn btn-sm btn-outline-primary w-100" href="<?= e(base_url($f['file_path'])) ?>" target="_blank">เปิด/ดาวน์โหลด</a>
                       </div>
-                      <div class="small text-muted"><?= e(human_filesize((int)$f['size_bytes'])) ?></div>
-                    <?php endif; ?>
-                    <?php if (!empty($f['caption'])): ?>
-                      <div class="small text-muted mt-1"><?= e($f['caption']) ?></div>
-                    <?php endif; ?>
-                    <div class="mt-1">
-                      <a class="btn btn-sm btn-outline-primary w-100" href="<?= e(base_url($f['file_path'])) ?>" target="_blank">เปิด/ดาวน์โหลด</a>
                     </div>
                   </div>
-                </div>
-              <?php endforeach; ?>
-            </div>
-          <?php endif; ?>
+                <?php endforeach; ?>
+              </div>
+            <?php endif; ?>
+          </div>
         </div>
       </div>
     </div>

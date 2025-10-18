@@ -12,12 +12,14 @@ if (current_user()) {
 $errors = [];
 $name = trim($_POST['name'] ?? '');
 $email = trim($_POST['email'] ?? '');
+$position = trim($_POST['position'] ?? '');
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf($_POST['_csrf'] ?? '', 'register')) {
         $errors[] = 'ไม่พบโทเค็นความปลอดภัย กรุณาลองใหม่อีกครั้ง';
     }
     if ($name === '' || mb_strlen($name) < 2) $errors[] = 'กรุณากรอกชื่ออย่างน้อย 2 ตัวอักษร';
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'รูปแบบอีเมลไม่ถูกต้อง';
+    if ($position === '' || mb_strlen($position) < 2) $errors[] = 'กรุณากรอกชื่อตำแหน่งอย่างน้อย 2 ตัวอักษร';
     $pass = $_POST['password'] ?? '';
     $pass2 = $_POST['password_confirm'] ?? '';
     if (mb_strlen($pass) < 8) $errors[] = 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร';
@@ -31,14 +33,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'อีเมลนี้ถูกใช้แล้ว';
         } else {
             $hash = password_hash($pass, PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare('INSERT INTO users(name,email,password_hash,role,status,created_at,updated_at)
-                                   VALUES(?,?,?, "employee","active",NOW(),NOW())');
-            $stmt->execute([$name, $email, $hash]);
+            $stmt = $pdo->prepare('INSERT INTO users(name,email,password_hash,position,role,status,created_at,updated_at)
+                                   VALUES(?,?,?,?,"employee","active",NOW(),NOW())');
+            $stmt->execute([$name, $email, $hash, $position]);
 
             // Auto-login
             $uid = (int)$pdo->lastInsertId();
             session_regenerate_id(true);
-            $_SESSION['user'] = ['id'=>$uid, 'name'=>$name, 'email'=>$email, 'role'=>'employee'];
+            $_SESSION['user'] = ['id'=>$uid, 'name'=>$name, 'email'=>$email, 'position'=>$position, 'role'=>'employee'];
             go('/dashboard.php');
             exit;
         }
@@ -71,6 +73,11 @@ render_header('สมัครสมาชิก');
           <div class="mb-3">
             <label class="form-label">อีเมล</label>
             <input type="email" name="email" class="form-control" value="<?= e($email) ?>" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">ตำแหน่งงาน</label>
+            <input type="text" name="position" class="form-control" value="<?= e($position) ?>" required>
+            <div class="form-text">เช่น หัวหน้าแผนก, เจ้าหน้าที่ประสานงาน</div>
           </div>
           <div class="mb-3">
             <label class="form-label">รหัสผ่าน</label>
