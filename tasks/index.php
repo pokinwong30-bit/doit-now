@@ -301,6 +301,21 @@ $to   = min($total, $offset + count($rows));
   </div>
 </div>
 
+<!-- Modal ส่งงาน -->
+<div class="modal fade" id="submissionModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">ส่งงาน</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="submissionModalBody" class="text-center text-muted py-4">กำลังโหลด...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 async function loadTaskDetail(taskId, flash) {
   const modalBody = document.getElementById('taskModalBody');
