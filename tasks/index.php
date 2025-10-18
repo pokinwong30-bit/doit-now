@@ -63,7 +63,12 @@ $total = (int)($stmt->fetch()['c'] ?? 0);
 $sql = "SELECT
           t.id, t.task_code, t.title, t.description,
           t.ordered_at, t.due_first_draft,
-          req.name AS requester_name, asg.name AS assignee_name
+          req.name AS requester_name, asg.name AS assignee_name,
+          (SELECT status FROM task_submissions WHERE task_id = t.id ORDER BY version DESC, id DESC LIMIT 1) AS latest_submission_status,
+          (SELECT version FROM task_submissions WHERE task_id = t.id ORDER BY version DESC, id DESC LIMIT 1) AS latest_submission_version,
+          (SELECT created_at FROM task_submissions WHERE task_id = t.id ORDER BY version DESC, id DESC LIMIT 1) AS latest_submission_created_at,
+          (SELECT review_comment FROM task_submissions WHERE task_id = t.id ORDER BY version DESC, id DESC LIMIT 1) AS latest_submission_review_comment,
+          (SELECT reviewed_at FROM task_submissions WHERE task_id = t.id ORDER BY version DESC, id DESC LIMIT 1) AS latest_submission_reviewed_at
         FROM tasks t
         LEFT JOIN users req ON req.id = t.requester_id
         LEFT JOIN users asg ON asg.id = t.assignee_id
@@ -81,6 +86,55 @@ function th_date_short(?string $dt): string {
   if ($ts <= 0) return '-';
   $months = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
   return (int)date('j',$ts) . ' ' . $months[(int)date('n',$ts)] . ' ' . ((int)date('Y',$ts)+543);
+}
+
+function submission_status_meta_php(?string $status): array {
+  return match($status) {
+    'approved' => ['class' => 'text-bg-success', 'label' => 'ผ่านอนุมัติ'],
+    'revision_required' => ['class' => 'text-bg-danger', 'label' => 'ขอแก้ไข'],
+    'pending' => ['class' => 'text-bg-warning text-dark', 'label' => 'รออนุมัติ'],
+    default => ['class' => 'text-bg-secondary', 'label' => 'ยังไม่มีการส่งงาน'],
+  };
+}
+
+function submission_row_class(?string $status): string {
+  return match($status) {
+    'revision_required' => 'table-warning',
+    'pending' => 'table-info',
+    'approved' => 'table-success',
+    default => '',
+  };
+}
+
+function render_submission_summary(array $row): string {
+  $status = $row['latest_submission_status'] ?? null;
+  if (!$status) {
+    return '<span class="text-muted">ยังไม่มีการส่งงาน</span>';
+  }
+
+  $meta = submission_status_meta_php($status);
+  $version = isset($row['latest_submission_version']) ? (int)$row['latest_submission_version'] : null;
+  $comment = trim((string)($row['latest_submission_review_comment'] ?? ''));
+  $createdAt = $row['latest_submission_created_at'] ?? null;
+  $reviewedAt = $row['latest_submission_reviewed_at'] ?? null;
+
+  ob_start();
+  ?>
+  <span class="badge rounded-pill <?= e($meta['class']) ?>">
+    <?= e($meta['label']) ?><?= $version ? ' #' . e((string)$version) : '' ?>
+  </span>
+  <?php if ($comment !== ''): ?>
+    <div class="small text-muted mt-1">ความคิดเห็น: <?= e($comment) ?></div>
+  <?php endif; ?>
+  <?php if ($status === 'pending' && $createdAt): ?>
+    <div class="small text-muted">ส่งเมื่อ <?= e(th_date_short($createdAt)) ?></div>
+  <?php elseif ($reviewedAt): ?>
+    <div class="small text-muted">อัปเดตล่าสุด <?= e(th_date_short($reviewedAt)) ?></div>
+  <?php elseif ($createdAt): ?>
+    <div class="small text-muted">ส่งเมื่อ <?= e(th_date_short($createdAt)) ?></div>
+  <?php endif; ?>
+  <?php
+  return trim((string)ob_get_clean());
 }
 
 /* ---------- สร้าง query string สำหรับลิงก์แบ่งหน้า ---------- */
@@ -167,14 +221,18 @@ $to   = min($total, $offset + count($rows));
           <th>คำอธิบาย</th>
           <th style="width:140px">วันที่สั่ง</th>
           <th style="width:160px">กำหนดส่ง</th>
+          <th style="width:220px">สถานะการส่งงาน</th>
+          <th class="text-center" style="width:140px">ส่งงาน</th>
           <th style="width:200px">ผู้สั่งงาน</th>
         </tr>
       </thead>
       <tbody>
       <?php if (!$rows): ?>
-        <tr><td colspan="7" class="text-center text-muted py-4">ไม่พบข้อมูล</td></tr>
+        <tr><td colspan="9" class="text-center text-muted py-4">ไม่พบข้อมูล</td></tr>
       <?php else: foreach($rows as $r): ?>
-        <tr>
+        <?php $rowStatus = $r['latest_submission_status'] ?? null; ?>
+        <?php $rowClass = submission_row_class($rowStatus); ?>
+        <tr data-task-id="<?= (int)$r['id'] ?>" data-submission-status="<?= e((string)$rowStatus) ?>" data-submission-version="<?= e((string)($r['latest_submission_version'] ?? '')) ?>" class="<?= e($rowClass) ?>">
           <td>
             <a href="javascript:void(0)" class="fw-semibold link-primary" data-task-id="<?= (int)$r['id'] ?>" onclick="openTaskModal(this)">
               <?= e($r['task_code']) ?>
@@ -185,6 +243,23 @@ $to   = min($total, $offset + count($rows));
           <td class="text-truncate" style="max-width:360px"><?= e(mb_strimwidth((string)$r['description'], 0, 200, '…','UTF-8')) ?></td>
           <td><?= e(th_date_short($r['ordered_at'])) ?></td>
           <td><?= e(th_date_short($r['due_first_draft'])) ?></td>
+          <td>
+            <div class="submission-status" data-role="submission-status">
+              <?= render_submission_summary($r) ?>
+            </div>
+          </td>
+          <td class="text-center">
+            <button
+              type="button"
+              class="btn btn-outline-primary btn-sm"
+              data-task-id="<?= (int)$r['id'] ?>"
+              data-task-code="<?= e($r['task_code']) ?>"
+              data-task-title="<?= e($r['title']) ?>"
+              onclick="openSubmissionModal(this)"
+            >
+              <i class="bi bi-upload"></i> ส่งงาน
+            </button>
+          </td>
           <td><?= e($r['requester_name'] ?: '-') ?></td>
         </tr>
       <?php endforeach; endif; ?>
@@ -239,22 +314,221 @@ $to   = min($total, $offset + count($rows));
   </div>
 </div>
 
-<script>
-async function openTaskModal(el){
-  const id = el.getAttribute('data-task-id');
-  const modalBody = document.getElementById('taskModalBody');
-  modalBody.innerHTML = 'กำลังโหลด...';
-  const myModal = new bootstrap.Modal(document.getElementById('taskModal'));
-  myModal.show();
+<!-- Modal ส่งงาน -->
+<div class="modal fade" id="submissionModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">ส่งงาน</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="submissionModalBody" class="text-center text-muted py-4">กำลังโหลด...</div>
+      </div>
+    </div>
+  </div>
+</div>
 
-  try{
-    const res = await fetch('view.php?id=' + encodeURIComponent(id), {headers:{'X-Requested-With':'XMLHttpRequest'}});
+<script>
+async function loadTaskDetail(taskId, flash) {
+  const modalBody = document.getElementById('taskModalBody');
+  if (!modalBody) return;
+  modalBody.innerHTML = 'กำลังโหลด...';
+  const params = new URLSearchParams({ id: taskId });
+  if (flash) {
+    params.set('flash', flash);
+  }
+
+  try {
+    const res = await fetch('view.php?' + params.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
     const html = await res.text();
     modalBody.innerHTML = html;
-  }catch(e){
+    activateInlineScripts(modalBody);
+  } catch (err) {
+    console.error(err);
     modalBody.innerHTML = '<div class="text-danger">โหลดรายละเอียดไม่สำเร็จ</div>';
   }
 }
+
+async function openTaskModal(el, flash) {
+  const id = el.getAttribute('data-task-id');
+  if (!id) return;
+  const modalElement = document.getElementById('taskModal');
+  const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+  modal.show();
+  await loadTaskDetail(id, flash);
+}
+
+window.loadTaskDetail = loadTaskDetail;
+
+async function loadSubmissionPanel(taskId, flash) {
+  const modalBody = document.getElementById('submissionModalBody');
+  if (!modalBody) return;
+  modalBody.innerHTML = 'กำลังโหลด...';
+
+  const params = new URLSearchParams({ id: taskId });
+  if (flash) {
+    params.set('flash', flash);
+  }
+
+  try {
+    const res = await fetch('submissions_panel.php?' + params.toString(), {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    const html = await res.text();
+    modalBody.innerHTML = html;
+    activateInlineScripts(modalBody);
+  } catch (err) {
+    console.error(err);
+    modalBody.innerHTML = '<div class="text-danger">โหลดฟอร์มส่งงานไม่สำเร็จ</div>';
+  }
+}
+
+async function openSubmissionModal(el, flash) {
+  const id = el.getAttribute('data-task-id');
+  if (!id) return;
+
+  const modalElement = document.getElementById('submissionModal');
+  if (!modalElement) return;
+  const modalTitle = modalElement.querySelector('.modal-title');
+  if (modalTitle) {
+    const code = el.getAttribute('data-task-code') || '';
+    const title = el.getAttribute('data-task-title') || '';
+    const pieces = [];
+    if (code) {
+      pieces.push(code);
+    }
+    if (title) {
+      pieces.push(title);
+    }
+    modalTitle.textContent = pieces.length ? 'ส่งงาน: ' + pieces.join(' — ') : 'ส่งงาน';
+  }
+
+  const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+  modal.show();
+  await loadSubmissionPanel(id, flash);
+}
+
+window.loadSubmissionPanel = loadSubmissionPanel;
+window.openSubmissionModal = openSubmissionModal;
+
+document.addEventListener('DOMContentLoaded', () => {
+  const taskModalElement = document.getElementById('taskModal');
+  if (taskModalElement) {
+    taskModalElement.addEventListener('hidden.bs.modal', () => {
+      const body = document.getElementById('taskModalBody');
+      if (body) {
+        body.innerHTML = 'กำลังโหลด...';
+      }
+    });
+  }
+
+  const submissionModalElement = document.getElementById('submissionModal');
+  if (submissionModalElement) {
+    submissionModalElement.addEventListener('hidden.bs.modal', () => {
+      const body = document.getElementById('submissionModalBody');
+      if (body) {
+        body.innerHTML = 'กำลังโหลด...';
+      }
+    });
+  }
+});
+
+function activateInlineScripts(container) {
+  if (!container) return;
+  const scripts = container.querySelectorAll('script');
+  scripts.forEach((oldScript) => {
+    const newScript = document.createElement('script');
+    for (const attr of oldScript.attributes) {
+      newScript.setAttribute(attr.name, attr.value);
+    }
+    newScript.appendChild(document.createTextNode(oldScript.textContent || ''));
+    oldScript.parentNode.replaceChild(newScript, oldScript);
+  });
+}
+
+function submissionStatusMetaClient(status) {
+  switch ((status || '').toLowerCase()) {
+    case 'approved':
+      return { label: 'ผ่านอนุมัติ', badgeClass: 'text-bg-success', rowClass: 'table-success' };
+    case 'revision_required':
+      return { label: 'ขอแก้ไข', badgeClass: 'text-bg-danger', rowClass: 'table-warning' };
+    case 'pending':
+      return { label: 'รออนุมัติ', badgeClass: 'text-bg-warning text-dark', rowClass: 'table-info' };
+    default:
+      return { label: 'ยังไม่มีการส่งงาน', badgeClass: 'text-bg-secondary', rowClass: '' };
+  }
+}
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[char] || char);
+}
+
+function formatThaiDateTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('th-TH', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(date);
+}
+
+function renderSubmissionSummaryClient(summary) {
+  if (!summary || !summary.status) {
+    return '<span class="text-muted">ยังไม่มีการส่งงาน</span>';
+  }
+
+  const meta = submissionStatusMetaClient(summary.status);
+  const versionText = summary.version ? ` #${escapeHtml(summary.version)}` : '';
+  const parts = [
+    `<span class="badge rounded-pill ${meta.badgeClass}">${meta.label}${versionText}</span>`
+  ];
+
+  if (summary.review_comment) {
+    parts.push(`<div class="small text-muted mt-1">ความคิดเห็น: ${escapeHtml(summary.review_comment)}</div>`);
+  }
+
+  const timestamp = summary.status === 'pending' ? (summary.created_at || '') : (summary.reviewed_at || summary.created_at || '');
+  const formatted = formatThaiDateTime(timestamp);
+  if (formatted) {
+    const prefix = summary.status === 'pending' ? 'ส่งเมื่อ' : 'อัปเดต';
+    parts.push(`<div class="small text-muted">${prefix} ${escapeHtml(formatted)}</div>`);
+  }
+
+  return parts.join('');
+}
+
+window.addEventListener('task-submission-updated', (event) => {
+  const detail = event.detail || {};
+  const taskId = detail.taskId;
+  if (!taskId) return;
+
+  const row = document.querySelector(`tr[data-task-id="${taskId}"]`);
+  if (!row) return;
+
+  const summary = detail.summary || null;
+  const status = summary?.status || '';
+  const meta = submissionStatusMetaClient(status);
+
+  row.dataset.submissionStatus = status;
+  row.dataset.submissionVersion = summary?.version ? String(summary.version) : '';
+  row.classList.remove('table-warning', 'table-info', 'table-success');
+  if (meta.rowClass) {
+    row.classList.add(meta.rowClass);
+  }
+
+  const cell = row.querySelector('[data-role="submission-status"]');
+  if (cell) {
+    cell.innerHTML = renderSubmissionSummaryClient(summary);
+  }
+});
 </script>
 
 <?php render_footer(); ?>
