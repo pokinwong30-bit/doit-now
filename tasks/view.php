@@ -31,6 +31,17 @@ $astmt = $pdo->prepare("
 $astmt->execute([$id]);
 $files = $astmt->fetchAll();
 
+$sstmt = $pdo->prepare("
+  SELECT ts.*, sub.name AS submitter_name, rev.name AS reviewer_name
+  FROM task_submissions ts
+  LEFT JOIN users sub ON sub.id = ts.submitter_id
+  LEFT JOIN users rev ON rev.id = ts.reviewed_by
+  WHERE ts.task_id = ?
+  ORDER BY ts.version DESC, ts.id DESC
+");
+$sstmt->execute([$id]);
+$submissions = $sstmt->fetchAll();
+
 /* ---------- Helpers ---------- */
 function th_date_long(?string $dt): string {
   if (!$dt) return '-';
@@ -53,10 +64,47 @@ function human_filesize($bytes, $dec=1){
 }
 function is_image_mime(string $mime): bool { return stripos($mime, 'image/') === 0; }
 
+function submission_status_meta(?string $status): array {
+  return match($status) {
+    'approved' => ['class' => 'text-bg-success', 'label' => 'ผ่านอนุมัติ'],
+    'revision_required' => ['class' => 'text-bg-danger', 'label' => 'ขอแก้ไข'],
+    'pending' => ['class' => 'text-bg-warning text-dark', 'label' => 'รออนุมัติ'],
+    default => ['class' => 'text-bg-secondary', 'label' => 'ยังไม่เคยส่งงาน'],
+  };
+}
+
 /* ---------- Decode JSON fields ---------- */
 $objective    = json_decode((string)$task['objective_json'],    true) ?: [];
 $channels     = json_decode((string)$task['channels_json'],     true) ?: [];
 $deliverables = json_decode((string)$task['deliverables_json'], true) ?: [];
+
+$user = current_user();
+$canReview = is_director_level($user);
+$canReview = is_manager_or_higher($user);
+$assigneeId = (int)($task['assignee_id'] ?? 0);
+$isAssignee = $user && (int)$user['id'] === $assigneeId;
+$canSubmit = $isAssignee || $canReview;
+
+$latestSubmission = $submissions[0] ?? null;
+$nextVersion = $latestSubmission ? ((int)$latestSubmission['version'] + 1) : 1;
+$latestStatus = $latestSubmission['status'] ?? null;
+$hasRevision = $latestStatus === 'revision_required';
+
+$pendingSubmission = null;
+foreach ($submissions as $sub) {
+  if (($sub['status'] ?? '') === 'pending') { $pendingSubmission = $sub; break; }
+}
+
+$flashKey = isset($_GET['flash']) ? trim((string)$_GET['flash']) : '';
+$flashMessage = null;
+if ($flashKey !== '') {
+  $flashMessage = match($flashKey) {
+    'submitted' => ['type' => 'success', 'text' => 'บันทึกการส่งงานเรียบร้อยแล้ว'],
+    'approved'  => ['type' => 'success', 'text' => 'อนุมัติผลงานเรียบร้อยแล้ว'],
+    'revision'  => ['type' => 'warning', 'text' => 'บันทึกคำขอแก้ไขงานแล้ว'],
+    default     => null,
+  };
+}
 ?>
 <div class="container-fluid">
   <div class="row g-3">
@@ -232,9 +280,12 @@ $deliverables = json_decode((string)$task['deliverables_json'], true) ?: [];
 
     </div>
 
-    <!-- RIGHT: attachments -->
+    <!-- RIGHT: submissions & attachments แก้ไข-->
     <div class="col-lg-4">
-      <div class="d-flex flex-column gap-3">
+      <div id="taskDetailRoot" class="d-flex flex-column gap-3" data-task-id="<?= (int)$task['id'] ?>">
+        <div class="card shadow-sm border-0">
+          
+
         <div class="card shadow-sm border-0">
           <div class="card-header bg-light fw-semibold">ไฟล์แนบ / รูปอ้างอิง</div>
           <div class="card-body">
@@ -272,3 +323,111 @@ $deliverables = json_decode((string)$task['deliverables_json'], true) ?: [];
     </div>
   </div>
 </div>
+
+<script>
+(() => {
+  const root = document.getElementById('taskDetailRoot');
+  if (!root) {
+    return;
+  }
+
+  const taskId = parseInt(root.dataset.taskId || '0', 10);
+  const feedback = document.getElementById('taskActionFeedback');
+
+  const showAlert = (type, message) => {
+    if (!feedback) return;
+    feedback.innerHTML = '';
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${type}`;
+    alert.textContent = message;
+    feedback.appendChild(alert);
+  };
+
+  const clearAlert = () => {
+    if (feedback) {
+      feedback.innerHTML = '';
+    }
+  };
+
+  const dispatchUpdate = (summary) => {
+    window.dispatchEvent(new CustomEvent('task-submission-updated', {
+      detail: { taskId, summary }
+    }));
+  };
+
+  const handleError = (fallbackMessage, error) => {
+    console.error(error);
+    showAlert('danger', fallbackMessage);
+  };
+
+  const submitForm = document.getElementById('submitWorkForm');
+  if (submitForm) {
+    submitForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearAlert();
+      const button = submitForm.querySelector('button[type="submit"]');
+      if (button) button.disabled = true;
+
+      try {
+        const formData = new FormData(submitForm);
+        formData.set('task_id', String(taskId));
+        const response = await fetch('submit_work.php', {
+          method: 'POST',
+          body: formData,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          showAlert('danger', data.error || 'ไม่สามารถส่งงานได้');
+        } else {
+          dispatchUpdate(data.summary || null);
+          if (typeof window.loadTaskDetail === 'function') {
+            await window.loadTaskDetail(taskId, data.flash || 'submitted');
+          } else {
+            window.location.reload();
+          }
+        }
+      } catch (err) {
+        handleError('เกิดข้อผิดพลาด ไม่สามารถส่งงานได้', err);
+      } finally {
+        if (button) button.disabled = false;
+      }
+    });
+  }
+
+  const reviewForm = document.getElementById('reviewSubmissionForm');
+  if (reviewForm) {
+    reviewForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearAlert();
+      const button = reviewForm.querySelector('button[type="submit"]');
+      if (button) button.disabled = true;
+
+      try {
+        const formData = new FormData(reviewForm);
+        formData.set('task_id', String(taskId));
+        const response = await fetch('review_submission.php', {
+          method: 'POST',
+          body: formData,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          showAlert('danger', data.error || 'ไม่สามารถบันทึกผลการตรวจงานได้');
+        } else {
+          dispatchUpdate(data.summary || null);
+          if (typeof window.loadTaskDetail === 'function') {
+            await window.loadTaskDetail(taskId, data.flash || 'approved');
+          } else {
+            window.location.reload();
+          }
+        }
+      } catch (err) {
+        handleError('เกิดข้อผิดพลาด ไม่สามารถบันทึกผลการตรวจงานได้', err);
+      } finally {
+        if (button) button.disabled = false;
+      }
+    });
+  }
+})();
+</script>
