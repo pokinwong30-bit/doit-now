@@ -22,6 +22,8 @@ $ordered_from = trim($_GET['ordered_from']  ?? '');
 $ordered_to   = trim($_GET['ordered_to']    ?? '');
 $due_from     = trim($_GET['due_from']      ?? '');
 $due_to       = trim($_GET['due_to']        ?? '');
+$dashboardFilter = trim((string)($_GET['dashboard_filter'] ?? ''));
+$dashboardFilterMessage = '';
 
 /* ---------- pagination ---------- */
 $per_page_opts = [10,20,50,100];
@@ -49,6 +51,35 @@ if ($ordered_from !== '') { $where[] = "t.ordered_at >= ?"; $params[] = date('Y-
 if ($ordered_to   !== '') { $where[] = "t.ordered_at <= ?"; $params[] = date('Y-m-d 23:59:59', strtotime($ordered_to)); }
 if ($due_from     !== '') { $where[] = "t.due_first_draft >= ?"; $params[] = date('Y-m-d 00:00:00', strtotime($due_from)); }
 if ($due_to       !== '') { $where[] = "t.due_first_draft <= ?"; $params[] = date('Y-m-d 23:59:59', strtotime($due_to)); }
+
+if ($dashboardFilter !== '') {
+  $tz = new DateTimeZone('Asia/Bangkok');
+
+  switch ($dashboardFilter) {
+    case 'pending':
+      $where[] = "t.status NOT IN ('done','cancelled')";
+      $where[] = "NOT EXISTS (SELECT 1 FROM task_submissions ts WHERE ts.task_id = t.id)";
+      $dashboardFilterMessage = 'แสดงเฉพาะงานที่ยังไม่เคยส่งงาน';
+      break;
+    case 'due_this_week':
+      $weekStart = (new DateTime('monday this week', $tz))->setTime(0, 0, 0);
+      $weekEnd = (clone $weekStart)->modify('+6 days')->setTime(23, 59, 59);
+      $where[] = "t.status NOT IN ('done','cancelled')";
+      $where[] = "t.due_first_draft BETWEEN ? AND ?";
+      $params[] = $weekStart->format('Y-m-d H:i:s');
+      $params[] = $weekEnd->format('Y-m-d H:i:s');
+      $dashboardFilterMessage = 'แสดงเฉพาะงานที่ครบกำหนดส่งภายในสัปดาห์นี้';
+      break;
+    case 'submitted_today':
+      $todayStart = (new DateTime('today', $tz))->setTime(0, 0, 0);
+      $todayEnd = (clone $todayStart)->setTime(23, 59, 59);
+      $where[] = "EXISTS (SELECT 1 FROM task_submissions ts WHERE ts.task_id = t.id AND ts.created_at BETWEEN ? AND ?)";
+      $params[] = $todayStart->format('Y-m-d H:i:s');
+      $params[] = $todayEnd->format('Y-m-d H:i:s');
+      $dashboardFilterMessage = 'แสดงเฉพาะงานที่มีการส่งงานภายในวันนี้';
+      break;
+  }
+}
 
 $sql_where = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
@@ -152,10 +183,19 @@ $total_pages = max(1, (int)ceil($total / $per_page));
 $from = min($total, $offset + 1);
 $to   = min($total, $offset + count($rows));
 ?>
+<?php if ($dashboardFilterMessage !== ''): ?>
+<div class="alert alert-info d-flex align-items-center gap-2">
+  <i class="bi bi-funnel"></i>
+  <div><?= e($dashboardFilterMessage) ?></div>
+</div>
+<?php endif; ?>
 <div class="card shadow-sm border-0 mb-3">
   <div class="card-header bg-light fw-semibold">ค้นหางาน</div>
   <div class="card-body">
     <form method="get" class="row g-3">
+      <?php if ($dashboardFilter !== ''): ?>
+        <input type="hidden" name="dashboard_filter" value="<?= e($dashboardFilter) ?>">
+      <?php endif; ?>
       <div class="col-lg-4">
         <label class="form-label">ค้นหารวม</label>
         <input type="text" class="form-control" name="q" value="<?= e($q) ?>" placeholder="รหัสงาน / ชื่องาน / ผู้สั่ง / ผู้รับมอบหมาย">
