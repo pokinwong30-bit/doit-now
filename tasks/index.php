@@ -222,13 +222,12 @@ $to   = min($total, $offset + count($rows));
           <th style="width:140px">วันที่สั่ง</th>
           <th style="width:160px">กำหนดส่ง</th>
           <th style="width:220px">สถานะการส่งงาน</th>
-          <th class="text-center" style="width:140px">ส่งงาน</th>
           <th style="width:200px">ผู้สั่งงาน</th>
         </tr>
       </thead>
       <tbody>
       <?php if (!$rows): ?>
-        <tr><td colspan="9" class="text-center text-muted py-4">ไม่พบข้อมูล</td></tr>
+        <tr><td colspan="8" class="text-center text-muted py-4">ไม่พบข้อมูล</td></tr>
       <?php else: foreach($rows as $r): ?>
         <?php $rowStatus = $r['latest_submission_status'] ?? null; ?>
         <?php $rowClass = submission_row_class($rowStatus); ?>
@@ -247,18 +246,6 @@ $to   = min($total, $offset + count($rows));
             <div class="submission-status" data-role="submission-status">
               <?= render_submission_summary($r) ?>
             </div>
-          </td>
-          <td class="text-center">
-            <button
-              type="button"
-              class="btn btn-outline-primary btn-sm"
-              data-task-id="<?= (int)$r['id'] ?>"
-              data-task-code="<?= e($r['task_code']) ?>"
-              data-task-title="<?= e($r['title']) ?>"
-              onclick="openSubmissionModal(this)"
-            >
-              <i class="bi bi-upload"></i> ส่งงาน
-            </button>
           </td>
           <td><?= e($r['requester_name'] ?: '-') ?></td>
         </tr>
@@ -360,57 +347,6 @@ async function openTaskModal(el, flash) {
 }
 
 window.loadTaskDetail = loadTaskDetail;
-
-async function loadSubmissionPanel(taskId, flash) {
-  const modalBody = document.getElementById('submissionModalBody');
-  if (!modalBody) return;
-  modalBody.innerHTML = 'กำลังโหลด...';
-
-  const params = new URLSearchParams({ id: taskId });
-  if (flash) {
-    params.set('flash', flash);
-  }
-
-  try {
-    const res = await fetch('submissions_panel.php?' + params.toString(), {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
-    const html = await res.text();
-    modalBody.innerHTML = html;
-    activateInlineScripts(modalBody);
-  } catch (err) {
-    console.error(err);
-    modalBody.innerHTML = '<div class="text-danger">โหลดฟอร์มส่งงานไม่สำเร็จ</div>';
-  }
-}
-
-async function openSubmissionModal(el, flash) {
-  const id = el.getAttribute('data-task-id');
-  if (!id) return;
-
-  const modalElement = document.getElementById('submissionModal');
-  if (!modalElement) return;
-  const modalTitle = modalElement.querySelector('.modal-title');
-  if (modalTitle) {
-    const code = el.getAttribute('data-task-code') || '';
-    const title = el.getAttribute('data-task-title') || '';
-    const pieces = [];
-    if (code) {
-      pieces.push(code);
-    }
-    if (title) {
-      pieces.push(title);
-    }
-    modalTitle.textContent = pieces.length ? 'ส่งงาน: ' + pieces.join(' — ') : 'ส่งงาน';
-  }
-
-  const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
-  modal.show();
-  await loadSubmissionPanel(id, flash);
-}
-
-window.loadSubmissionPanel = loadSubmissionPanel;
-window.openSubmissionModal = openSubmissionModal;
 
 function activateInlineScripts(container) {
   if (!container) return;
