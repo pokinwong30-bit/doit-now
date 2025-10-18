@@ -190,7 +190,7 @@ function submission_status_meta(?string $status): array
   <?php elseif ($firstPendingSubmission): ?>
     <div class="alert alert-info">
       <div><strong>ครั้งที่ <?= (int)$firstPendingSubmission['version'] ?></strong> ส่งเมื่อ <?= e(th_date_long($firstPendingSubmission['created_at'] ?? null)) ?></div>
-      <div class="small text-muted">โดย <?= e($firstPendingSubmission['submitter_name'] ?: 'ไม่ทราบชื่อ') ?> — รอผู้จัดการตรวจสอบ</div>
+      <div class="small text-muted">โดย <?= e($firstPendingSubmission['submitter_name'] ?: 'ไม่ทราบชื่อ') ?> — รอผู้อำนวยการตรวจสอบ</div>
     </div>
   <?php endif; ?>
 
@@ -277,7 +277,7 @@ function submission_status_meta(?string $status): array
                     <?php endif; ?>
                   </div>
                 <?php elseif (($submission['status'] ?? '') === 'pending'): ?>
-                  <div class="small text-muted mt-1">รอผู้จัดการตรวจสอบ</div>
+                  <div class="small text-muted mt-1">รอผู้อำนวยการตรวจสอบ</div>
                 <?php endif; ?>
               </div>
             </div>

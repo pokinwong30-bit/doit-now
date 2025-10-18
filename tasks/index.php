@@ -8,7 +8,7 @@ require_login();
 require_once __DIR__ . '/../includes/layout.php';
 
 $currentUser = current_user();
-$canReviewSubmissions = is_manager_or_higher($currentUser);
+$canReviewSubmissions = is_director_level($currentUser);
 
 render_header('ตารางงานรวม');
 
@@ -225,7 +225,7 @@ $to   = min($total, $offset + count($rows));
           <th style="width:140px">วันที่สั่ง</th>
           <th style="width:160px">กำหนดส่ง</th>
           <th style="width:220px">สถานะการส่งงาน</th>
-          <th style="width:140px" class="text-center">ส่งงาน</th>
+          <th style="width:140px" class="text-center"><?= $canReviewSubmissions ? 'ตรวจงาน' : 'ส่งงาน' ?></th>
           <th style="width:200px">ผู้สั่งงาน</th>
         </tr>
       </thead>
@@ -253,7 +253,11 @@ $to   = min($total, $offset + count($rows));
           </td>
           <td class="text-center">
             <button type="button" class="btn btn-sm btn-outline-primary" data-task-id="<?= (int)$r['id'] ?>" onclick="openSubmissionModal(this)">
-              <i class="bi bi-upload"></i> ส่งงาน
+              <?php if ($canReviewSubmissions): ?>
+                <i class="bi bi-clipboard-check"></i> ตรวจงาน
+              <?php else: ?>
+                <i class="bi bi-upload"></i> ส่งงาน
+              <?php endif; ?>
             </button>
           </td>
           <td><?= e($r['requester_name'] ?: '-') ?></td>
