@@ -385,6 +385,7 @@ $to   = min($total, $offset + count($rows));
   </div>
 </div>
 
+</div>
 <script>
 async function loadTaskDetail(taskId, flash) {
   const modalBody = document.getElementById('taskModalBody');
