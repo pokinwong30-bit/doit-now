@@ -24,7 +24,12 @@ html, body{
                         Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans",
                         "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
                         "Noto Color Emoji";
+    --bs-body-font-size: 0.95rem; /* ≈15px เพื่อให้เล็กลงแต่ยังอ่านง่าย */
   }
+
+  html { font-size: 93.75%; } /* ลดขนาดฐานจาก 16px → 15px ให้เว็บดู compact ขึ้น */
+
+  body { font-size: var(--bs-body-font-size); }
   
   .bg-maroon{ background-color: var(--maroon-700)!important; }
   .text-maroon{ color: var(--maroon-700)!important; }
