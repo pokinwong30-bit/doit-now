@@ -183,7 +183,6 @@ $total_pages = max(1, (int)ceil($total / $per_page));
 $from = min($total, $offset + 1);
 $to   = min($total, $offset + count($rows));
 ?>
-<div class="tasks-index-compact">
 <?php if ($dashboardFilterMessage !== ''): ?>
 <div class="alert alert-info d-flex align-items-center gap-2">
   <i class="bi bi-funnel"></i>

@@ -24,10 +24,10 @@ html, body{
                         Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans",
                         "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
                         "Noto Color Emoji";
-    --bs-body-font-size: 0.95rem; /* ≈15px เพื่อให้เล็กลงแต่ยังอ่านง่าย */
+    --bs-body-font-size: 14px; /* ≈15px เพื่อให้เล็กลงแต่ยังอ่านง่าย */
   }
 
-  html { font-size: 93.75%; } /* ลดขนาดฐานจาก 16px → 15px ให้เว็บดู compact ขึ้น */
+  html { font-size: 14px; } /* ลดขนาดฐานจาก 16px → 15px ให้เว็บดู compact ขึ้น */
 
   body { font-size: var(--bs-body-font-size); }
   
@@ -64,7 +64,7 @@ html, body{
     background: var(--maroon-100);
     color: var(--maroon-700);
     border-radius: 50%;
-    font-size: 1.25rem;
+    font-size: 14px;
   }
   
   /* Timeline เบา ๆ */
@@ -131,7 +131,7 @@ html, body{
 
 /* บรรทัดของ “ชื่องาน” ให้ขึ้นหลายบรรทัดได้ */
 .calendar-pill .chip-title {
-  font-size: .7rem;
+  font-size: 14px;
   line-height: 1.25;
   white-space: normal;          /* <-- อนุญาตขึ้นบรรทัดใหม่ */
   word-break: break-word;       /* ตัดคำยาว */
@@ -142,7 +142,7 @@ html, body{
 .badge.badge-pill {
   border-radius: 999px; 
   font-weight: 600;
-  font-size: .7rem; 
+  font-size: 14px; 
   padding: .25rem .5rem;
 }
 
