@@ -95,7 +95,7 @@ $total = (int)($stmt->fetch()['c'] ?? 0);
 
 /* ---------- ดึงรายการหน้าแสดงผล ---------- */
 $sql = "SELECT
-          t.id, t.task_code, t.title, t.description,
+          t.id, t.task_code, t.title, t.description, t.task_type,
           t.ordered_at, t.due_first_draft,
           req.name AS requester_name, asg.name AS assignee_name,
           (SELECT status FROM task_submissions WHERE task_id = t.id ORDER BY version DESC, id DESC LIMIT 1) AS latest_submission_status,
@@ -107,7 +107,7 @@ $sql = "SELECT
         LEFT JOIN users req ON req.id = t.requester_id
         LEFT JOIN users asg ON asg.id = t.assignee_id
         $sql_where
-        ORDER BY t.ordered_at DESC, t.id DESC
+        ORDER BY t.task_type ASC, t.ordered_at DESC, t.id DESC
         LIMIT $per_page OFFSET $offset";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -272,7 +272,23 @@ $to   = min($total, $offset + count($rows));
       <tbody>
       <?php if (!$rows): ?>
         <tr><td colspan="9" class="text-center text-muted py-4">ไม่พบข้อมูล</td></tr>
-      <?php else: foreach($rows as $r): ?>
+      <?php else: ?>
+        <?php $currentType = null; ?>
+        <?php foreach($rows as $r): ?>
+        <?php
+          $typeLabel = trim((string)($r['task_type'] ?? ''));
+          if ($typeLabel === '') {
+            $typeLabel = 'ไม่ระบุประเภท';
+          }
+          if ($currentType !== $typeLabel):
+            $currentType = $typeLabel;
+        ?>
+        <tr class="table-secondary">
+          <td colspan="9" class="fw-semibold text-maroon">
+            <i class="bi bi-tags-fill me-1"></i> <?= e($currentType) ?>
+          </td>
+        </tr>
+        <?php endif; ?>
         <?php $rowStatus = $r['latest_submission_status'] ?? null; ?>
         <?php $rowClass = submission_row_class($rowStatus); ?>
         <tr data-task-id="<?= (int)$r['id'] ?>" data-submission-status="<?= e((string)$rowStatus) ?>" data-submission-version="<?= e((string)($r['latest_submission_version'] ?? '')) ?>" class="<?= e($rowClass) ?>">
