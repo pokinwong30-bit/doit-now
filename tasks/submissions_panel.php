@@ -41,7 +41,7 @@ $sstmt->execute([$taskId]);
 $submissions = $sstmt->fetchAll();
 
 $user = current_user();
-$canReview = $user ? is_director_level($user) : false;
+$canReview = $user ? is_manager_or_higher($user) : false;
 
 $latestSubmission = $submissions[0] ?? null;
 $nextVersion = $latestSubmission ? ((int)$latestSubmission['version'] + 1) : 1;
