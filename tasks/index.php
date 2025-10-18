@@ -7,6 +7,9 @@ require_once __DIR__ . '/../includes/csrf.php';
 require_login();
 require_once __DIR__ . '/../includes/layout.php';
 
+$currentUser = current_user();
+$canReviewSubmissions = is_director_level($currentUser);
+
 render_header('ตารางงานรวม');
 
 /* ---------- รับค่า filter ---------- */
@@ -19,6 +22,8 @@ $ordered_from = trim($_GET['ordered_from']  ?? '');
 $ordered_to   = trim($_GET['ordered_to']    ?? '');
 $due_from     = trim($_GET['due_from']      ?? '');
 $due_to       = trim($_GET['due_to']        ?? '');
+$dashboardFilter = trim((string)($_GET['dashboard_filter'] ?? ''));
+$dashboardFilterMessage = '';
 
 /* ---------- pagination ---------- */
 $per_page_opts = [10,20,50,100];
@@ -47,6 +52,35 @@ if ($ordered_to   !== '') { $where[] = "t.ordered_at <= ?"; $params[] = date('Y-
 if ($due_from     !== '') { $where[] = "t.due_first_draft >= ?"; $params[] = date('Y-m-d 00:00:00', strtotime($due_from)); }
 if ($due_to       !== '') { $where[] = "t.due_first_draft <= ?"; $params[] = date('Y-m-d 23:59:59', strtotime($due_to)); }
 
+if ($dashboardFilter !== '') {
+  $tz = new DateTimeZone('Asia/Bangkok');
+
+  switch ($dashboardFilter) {
+    case 'pending':
+      $where[] = "t.status NOT IN ('done','cancelled')";
+      $where[] = "NOT EXISTS (SELECT 1 FROM task_submissions ts WHERE ts.task_id = t.id)";
+      $dashboardFilterMessage = 'แสดงเฉพาะงานที่ยังไม่เคยส่งงาน';
+      break;
+    case 'due_this_week':
+      $weekStart = (new DateTime('monday this week', $tz))->setTime(0, 0, 0);
+      $weekEnd = (clone $weekStart)->modify('+6 days')->setTime(23, 59, 59);
+      $where[] = "t.status NOT IN ('done','cancelled')";
+      $where[] = "t.due_first_draft BETWEEN ? AND ?";
+      $params[] = $weekStart->format('Y-m-d H:i:s');
+      $params[] = $weekEnd->format('Y-m-d H:i:s');
+      $dashboardFilterMessage = 'แสดงเฉพาะงานที่ครบกำหนดส่งภายในสัปดาห์นี้';
+      break;
+    case 'submitted_today':
+      $todayStart = (new DateTime('today', $tz))->setTime(0, 0, 0);
+      $todayEnd = (clone $todayStart)->setTime(23, 59, 59);
+      $where[] = "EXISTS (SELECT 1 FROM task_submissions ts WHERE ts.task_id = t.id AND ts.created_at BETWEEN ? AND ?)";
+      $params[] = $todayStart->format('Y-m-d H:i:s');
+      $params[] = $todayEnd->format('Y-m-d H:i:s');
+      $dashboardFilterMessage = 'แสดงเฉพาะงานที่มีการส่งงานภายในวันนี้';
+      break;
+  }
+}
+
 $sql_where = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
 /* ---------- นับทั้งหมด ---------- */
@@ -61,7 +95,7 @@ $total = (int)($stmt->fetch()['c'] ?? 0);
 
 /* ---------- ดึงรายการหน้าแสดงผล ---------- */
 $sql = "SELECT
-          t.id, t.task_code, t.title, t.description,
+          t.id, t.task_code, t.title, t.description, t.task_type,
           t.ordered_at, t.due_first_draft,
           req.name AS requester_name, asg.name AS assignee_name,
           (SELECT status FROM task_submissions WHERE task_id = t.id ORDER BY version DESC, id DESC LIMIT 1) AS latest_submission_status,
@@ -73,7 +107,7 @@ $sql = "SELECT
         LEFT JOIN users req ON req.id = t.requester_id
         LEFT JOIN users asg ON asg.id = t.assignee_id
         $sql_where
-        ORDER BY t.ordered_at DESC, t.id DESC
+        ORDER BY t.task_type ASC, t.ordered_at DESC, t.id DESC
         LIMIT $per_page OFFSET $offset";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -149,10 +183,20 @@ $total_pages = max(1, (int)ceil($total / $per_page));
 $from = min($total, $offset + 1);
 $to   = min($total, $offset + count($rows));
 ?>
+<div class="tasks-index-compact">
+<?php if ($dashboardFilterMessage !== ''): ?>
+<div class="alert alert-info d-flex align-items-center gap-2">
+  <i class="bi bi-funnel"></i>
+  <div><?= e($dashboardFilterMessage) ?></div>
+</div>
+<?php endif; ?>
 <div class="card shadow-sm border-0 mb-3">
   <div class="card-header bg-light fw-semibold">ค้นหางาน</div>
   <div class="card-body">
     <form method="get" class="row g-3">
+      <?php if ($dashboardFilter !== ''): ?>
+        <input type="hidden" name="dashboard_filter" value="<?= e($dashboardFilter) ?>">
+      <?php endif; ?>
       <div class="col-lg-4">
         <label class="form-label">ค้นหารวม</label>
         <input type="text" class="form-control" name="q" value="<?= e($q) ?>" placeholder="รหัสงาน / ชื่องาน / ผู้สั่ง / ผู้รับมอบหมาย">
@@ -222,13 +266,30 @@ $to   = min($total, $offset + count($rows));
           <th style="width:140px">วันที่สั่ง</th>
           <th style="width:160px">กำหนดส่ง</th>
           <th style="width:220px">สถานะการส่งงาน</th>
+          <th style="width:140px" class="text-center"><?= $canReviewSubmissions ? 'ตรวจงาน' : 'ส่งงาน' ?></th>
           <th style="width:200px">ผู้สั่งงาน</th>
         </tr>
       </thead>
       <tbody>
       <?php if (!$rows): ?>
-        <tr><td colspan="8" class="text-center text-muted py-4">ไม่พบข้อมูล</td></tr>
-      <?php else: foreach($rows as $r): ?>
+        <tr><td colspan="9" class="text-center text-muted py-4">ไม่พบข้อมูล</td></tr>
+      <?php else: ?>
+        <?php $currentType = null; ?>
+        <?php foreach($rows as $r): ?>
+        <?php
+          $typeLabel = trim((string)($r['task_type'] ?? ''));
+          if ($typeLabel === '') {
+            $typeLabel = 'ไม่ระบุประเภท';
+          }
+          if ($currentType !== $typeLabel):
+            $currentType = $typeLabel;
+        ?>
+        <tr class="table-secondary">
+          <td colspan="9" class="fw-semibold text-maroon">
+            <i class="bi bi-tags-fill me-1"></i> <?= e($currentType) ?>
+          </td>
+        </tr>
+        <?php endif; ?>
         <?php $rowStatus = $r['latest_submission_status'] ?? null; ?>
         <?php $rowClass = submission_row_class($rowStatus); ?>
         <tr data-task-id="<?= (int)$r['id'] ?>" data-submission-status="<?= e((string)$rowStatus) ?>" data-submission-version="<?= e((string)($r['latest_submission_version'] ?? '')) ?>" class="<?= e($rowClass) ?>">
@@ -246,6 +307,15 @@ $to   = min($total, $offset + count($rows));
             <div class="submission-status" data-role="submission-status">
               <?= render_submission_summary($r) ?>
             </div>
+          </td>
+          <td class="text-center">
+            <button type="button" class="btn btn-sm btn-outline-primary" data-task-id="<?= (int)$r['id'] ?>" onclick="openSubmissionModal(this)">
+              <?php if ($canReviewSubmissions): ?>
+                <i class="bi bi-clipboard-check"></i> ตรวจงาน
+              <?php else: ?>
+                <i class="bi bi-upload"></i> ส่งงาน
+              <?php endif; ?>
+            </button>
           </td>
           <td><?= e($r['requester_name'] ?: '-') ?></td>
         </tr>
@@ -316,6 +386,7 @@ $to   = min($total, $offset + count($rows));
   </div>
 </div>
 
+</div>
 <script>
 async function loadTaskDetail(taskId, flash) {
   const modalBody = document.getElementById('taskModalBody');
@@ -347,6 +418,37 @@ async function openTaskModal(el, flash) {
 }
 
 window.loadTaskDetail = loadTaskDetail;
+
+async function loadSubmissionPanel(taskId, flash) {
+  const modalBody = document.getElementById('submissionModalBody');
+  if (!modalBody) return;
+  modalBody.innerHTML = 'กำลังโหลด...';
+  const params = new URLSearchParams({ id: taskId });
+  if (flash) {
+    params.set('flash', flash);
+  }
+
+  try {
+    const res = await fetch('submissions_panel.php?' + params.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const html = await res.text();
+    modalBody.innerHTML = html;
+    activateInlineScripts(modalBody);
+  } catch (err) {
+    console.error(err);
+    modalBody.innerHTML = '<div class="text-danger">โหลดฟอร์มส่งงานไม่สำเร็จ</div>';
+  }
+}
+
+async function openSubmissionModal(el, flash) {
+  const id = el.getAttribute('data-task-id');
+  if (!id) return;
+  const modalElement = document.getElementById('submissionModal');
+  const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+  modal.show();
+  await loadSubmissionPanel(id, flash);
+}
+
+window.loadSubmissionPanel = loadSubmissionPanel;
 
 function activateInlineScripts(container) {
   if (!container) return;

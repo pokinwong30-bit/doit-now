@@ -24,7 +24,12 @@ html, body{
                         Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans",
                         "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
                         "Noto Color Emoji";
+    --bs-body-font-size: 0.95rem; /* ≈15px เพื่อให้เล็กลงแต่ยังอ่านง่าย */
   }
+
+  html { font-size: 93.75%; } /* ลดขนาดฐานจาก 16px → 15px ให้เว็บดู compact ขึ้น */
+
+  body { font-size: var(--bs-body-font-size); }
   
   .bg-maroon{ background-color: var(--maroon-700)!important; }
   .text-maroon{ color: var(--maroon-700)!important; }
@@ -145,4 +150,24 @@ html, body{
 .badge-maroon { background-color:#6c1b2a; color:#fff; }   /* Final */
 .badge-amber  { background-color:#f0ad4e; color:#2b1b00;} /* Draft */
 .badge-green  { background-color:#198754; color:#fff; }   /* Launch */
+
+/* Typography: งานทั้งหมด (tasks/index.php) ให้เล็กลงแบบ compact */
+.tasks-index-compact {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.tasks-index-compact .form-control,
+.tasks-index-compact .form-select,
+.tasks-index-compact .btn,
+.tasks-index-compact .table,
+.tasks-index-compact table,
+.tasks-index-compact .page-link,
+.tasks-index-compact .badge,
+.tasks-index-compact .modal-title,
+.tasks-index-compact .card-header,
+.tasks-index-compact .card-body,
+.tasks-index-compact .card-footer {
+  font-size: inherit;
+}
 
