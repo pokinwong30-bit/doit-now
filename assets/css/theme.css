@@ -9,17 +9,17 @@ html, body{
   
   /* ปุ่ม/การ์ด/เมนู ฯลฯ จะรับ var(--bs-font-sans-serif) อัตโนมัติ */
 /* assets/css/theme.css */
-/* โทนแดงเลือดหมู + ปรับปุ่ม/การ์ด/แถบด้านบน */
+/* โทนเหลืองสดใส + ปรับปุ่ม/การ์ด/แถบด้านบน */
 :root{
-    --maroon-900:#5A0013;
-    --maroon-800:#6a0017;
-    --maroon-700:#7A0019; /* primary */
-    --maroon-600:#8c0020;
-    --maroon-500:#B3002D;
-    --maroon-300:#d45a74;
-    --maroon-100:#f7e6ea;
+    --maroon-900:#a36a00;
+    --maroon-800:#bf7f00;
+    --maroon-700:#ffc107; /* primary */
+    --maroon-600:#ffca2c;
+    --maroon-500:#ffd24d;
+    --maroon-300:#ffe082;
+    --maroon-100:#fff8db;
   
-    --on-maroon:#ffffff;
+    --on-maroon:#332200;
     --bs-font-sans-serif: "Prompt", system-ui, -apple-system, "Segoe UI",
                         Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans",
                         "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
@@ -38,7 +38,7 @@ html, body{
   .navbar.bg-maroon .nav-link,
   .navbar.bg-maroon .navbar-text { color: var(--on-maroon)!important; }
   .navbar.bg-maroon .nav-link.active,
-  .navbar.bg-maroon .nav-link:hover { color: #fff!important; }
+  .navbar.bg-maroon .nav-link:hover { color: #1f1500!important; }
   
   /* ปุ่มหลัก */
   .btn-primary{
@@ -90,14 +90,16 @@ html, body{
     font-weight: 700;
   }
   .fc .fc-button-primary {
-    background-color: #6c1b2a;
-    border-color: #6c1b2a;
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #332200;
   }
   .fc .fc-button-primary:not(:disabled).fc-button-active,
   .fc .fc-button-primary:not(:disabled):active,
   .fc .fc-button-primary:hover {
-    background-color: #581522;
-    border-color: #581522;
+    background-color: #e0a800;
+    border-color: #e0a800;
+    color: #1f1500;
   }
   
   /* ปรับ event ให้มีเงานิด ๆ */
@@ -146,8 +148,8 @@ html, body{
   padding: .25rem .5rem;
 }
 
-/* โทนสี badge ให้เข้ากับธีมแดงเลือดหมู */
-.badge-maroon { background-color:#6c1b2a; color:#fff; }   /* Final */
+/* โทนสี badge ให้เข้ากับธีมเหลืองสดใส */
+.badge-maroon { background-color:#ffc107; color:#332200; } /* Final */
 .badge-amber  { background-color:#f0ad4e; color:#2b1b00;} /* Draft */
 .badge-green  { background-color:#198754; color:#fff; }   /* Launch */
 
@@ -170,4 +172,3 @@ html, body{
 .tasks-index-compact .card-footer {
   font-size: inherit;
 }
-
